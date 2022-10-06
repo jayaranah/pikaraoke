@@ -512,7 +512,11 @@ class Karaoke:
 				shutil.move(self.download_path+'tmp/'+bn, self.download_path+bn)
 				self.get_available_songs()
 				if enqueue:
-					self.enqueue(self.download_path+bn, song_added_by)
+					if self.platform == "windows":
+						dpath = str(PureWindowsPath(self.download_path+bn))
+						self.enqueue(dpath, song_added_by)
+					else:
+						self.enqueue(self.download_path+bn, song_added_by)
 					self.downloading_songs[song_url] = '00'
 			else:
 				logging.error("Error queueing song: " + song_url)
@@ -524,24 +528,35 @@ class Karaoke:
 
 	def get_available_songs(self):
 		logging.info("Fetching available songs in: " + self.download_path)
-		# types = ['.mp4', '.mp3', '.zip', '.mkv', '.avi', '.webm', '.mov']
 		files_grabbed = []
 		self.songname_trans = {}
-		# for bn in os.listdir(self.download_path):
-		P=Path(self.download_path)
-		for file in P.rglob('*.*'):
-			base, ext = os.path.splitext(file.as_posix())
-			if ext.lower() in media_types:
-				if os.path.isfile(file.as_posix()):
-					if os.path.splitext(file)[1].lower() in media_types:
-						files_grabbed.append(file)
-						trans = unidecode(self.filename_from_path(file)).lower()
+		if self.platform == "windows":
+			P=Path(self.download_path)
+			for file in P.rglob('*.*'):
+				base, ext = os.path.splitext(file.as_posix())
+				if ext.lower() in media_types:
+					if os.path.isfile(file.as_posix()):
+						if os.path.splitext(file)[1].lower() in media_types:
+							files_grabbed.append(file)
+							trans = unidecode(self.filename_from_path(file)).lower()
+							while trans and not trans[0].islower() and not trans[0].isdigit():
+								trans = trans[1:]
+							p = str(PureWindowsPath(file))
+							self.songname_trans[p] = trans
+		else:
+			for bn in os.listdir(self.download_path):
+				fn = self.download_path + bn
+				if not bn.startswith('.') and os.path.isfile(fn):
+					if os.path.splitext(fn)[1].lower() in media_types:
+						files_grabbed.append(fn)
+						trans = unidecode(self.filename_from_path(fn)).lower()
+						# strip leading non-transliterable symbols
 						while trans and not trans[0].islower() and not trans[0].isdigit():
 							trans = trans[1:]
-						p = str(PureWindowsPath(file))
-						self.songname_trans[p] = trans
-		self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
+						self.songname_trans[fn] = trans
 
+		# self.available_songs = sorted(files_grabbed, key = lambda f: str.lower(os.path.basename(f)))
+		self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
 
 	def get_all_assoc_files(self, song_path):
 		basename = os.path.basename(song_path)
