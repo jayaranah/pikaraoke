@@ -1,16 +1,16 @@
-import os, random, time, json, hashlib
+import os, random, time, json, hashlib, codecs
 import logging, socket, subprocess
 import multiprocessing as mp
 import shutil, psutil
 from subprocess import check_output
 from collections import *
 from pathlib import Path, PureWindowsPath
-
 import numpy as np
 
 from constants import media_types
 
 import pygame
+import pygame.freetype
 import qrcode
 import arabic_reshaper
 from bidi.algorithm import get_display
@@ -24,6 +24,8 @@ STD_VOL = 65536/8/np.sqrt(2)
 if get_platform() != "windows":
 	from signal import SIGALRM, alarm, signal
 
+settings = codecs.open("settings.json","r","utf-8")
+Settings = json.load(settings)
 
 class Karaoke:
 	raspi_wifi_config_ip = "10.0.0.1"
@@ -73,10 +75,11 @@ class Karaoke:
 		self.omxplayer_adev = 'both'
 		self.download_path = args.dl_path
 		self.dual_screen = args.dual_screen
-		self.high_quality = args.high_quality
+		# self.high_quality = args.high_quality
+		self.high_quality = Settings["quality"]
 		self.splash_delay = int(args.splash_delay)
 		self.volume_offset = self.volume = args.volume
-		self.youtubedl_path = args.youtubedl_path
+		self.youtubedl_path = Settings["ytpath"]
 		self.omxplayer_path = args.omxplayer_path
 		self.use_omxplayer = args.use_omxplayer
 		self.use_vlc = args.use_vlc
@@ -95,6 +98,8 @@ class Karaoke:
 		self.player_state = {}
 		self.downloading_songs = {}
 		self.log_level = int(args.log_level)
+
+		print("download_path now: " + self.download_path)
 
 		logging.basicConfig(
 			format = "[%(asctime)s] %(levelname)s: %(message)s",
@@ -300,6 +305,8 @@ class Karaoke:
 					raise KeyboardInterrupt
 			logging.debug("Done initializing splash screen")
 
+
+
 	def toggle_full_screen(self, fullscreen=None):
 		if not self.hide_splash_screen:
 			logging.debug("Toggling fullscreen...")
@@ -494,7 +501,23 @@ class Karaoke:
 		logging.info("Downloading video: " + song_url)
 		self.downloading_songs[song_url] = 1
 		dl_path = "%(title)s---%(id)s.%(ext)s"
-		opt_quality = ['-f', 'bestvideo[ext!=webm][height<=1080]+bestaudio[ext!=webm]/best[ext!=webm]'] if self.high_quality else ['-f', 'mp4']
+
+		settings = codecs.open("settings.json","r","utf-8")
+		Settings = json.load(settings)
+
+		if Settings["quality"] == "360p":
+			opt_quality = ['-f', '18+140']
+
+		elif Settings["quality"] == "480p":
+			opt_quality = ['-f', '135+140']
+
+		elif Settings["quality"] == "720p":
+			opt_quality = ['-f', '22+140']
+			
+		elif Settings["quality"] == "1080p":
+			opt_quality = ['-f', '137+140']
+
+		# opt_quality = ['-f', 'bestvideo[ext!=webm][height<=480]+bestaudio[ext!=webm]/best[ext!=webm]'] if self.high_quality else ['-f', 'mp4']
 		opt_sub = ['--sub-langs', 'all', '--embed-subs'] if include_subtitles else []
 		cmd = [self.youtubedl_path] + opt_quality + ["-o", self.download_path+'tmp/'+dl_path] + opt_sub + [song_url]
 		logging.debug("Youtube-dl command: " + " ".join(cmd))
