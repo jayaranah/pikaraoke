@@ -195,3 +195,8 @@ Volume Normalization
 Different songs often have different volume. Enabling volume normalization will first run <i>ffmpeg</i> to compute the global volume of a song and automatically adjust player volume so that every song sounds equally loud.
 Song library download path
 Total number of songs
+Change song directory
+Select directory
+Changing song directory need to restart pikaraoke to take effect.
+Download Quality
+Select Quality
