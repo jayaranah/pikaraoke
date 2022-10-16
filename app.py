@@ -2,7 +2,7 @@
 
 import argparse
 import datetime
-import json
+import json, codecs
 import locale
 import logging
 import os
@@ -33,20 +33,31 @@ try:
 except ImportError:
 	from urllib import quote, unquote
 
+# from tkinter import filedialog
+from tkinter import Tk
+from tkinter.filedialog import askdirectory
+import cgi
+
+settings = codecs.open("settings.json","r","utf-8")
+Settings = json.load(settings)
+
+if Settings["loglevel"] != "NOTSET":
+	logging.basicConfig(filename='tmp/myapp.log', level=Settings["loglevel"], 
+						format='%(asctime)s %(levelname)s %(name)s %(filename)s %(lineno)d %(message)s')
+	logger=logging.getLogger(__name__)
+	
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 site_name = "PiKaraoke"
-admin_password = None
+admin_password = Settings["admin_password"]
 os.texts = defaultdict(lambda: "")
 getString = lambda ii: os.texts[ii]
 getString1 = lambda lang, ii: os.langs[lang].get(ii, os.langs['en_US'][ii])
-
 
 # Define global symbols for Jinja templates 
 @app.context_processor
 def inject_stage_and_region():
 	return {'getString': getString, 'getString1': getString}
-
 
 @app.before_request
 def preprocessor():
@@ -74,7 +85,6 @@ def filename_from_path(file_path, remove_youtube_id = True):
 
 def url_escape(filename):
 	return quote(filename.encode("utf8"))
-
 
 def is_admin():
 	if (admin_password == None):
@@ -148,7 +158,6 @@ def change_language(language):
 		logging.error(f"Failed to set server language to {language}")
 	return os.lang
 
-
 @app.route("/auth", methods = ["POST"])
 def auth():
 	d = request.form.to_dict()
@@ -205,7 +214,6 @@ def norm_vol(mode):
 @app.route("/queue")
 def queue():
 	return render_template("queue.html", getString1 = lambda ii: getString1(request.client_lang, ii), queue = K.queue, site_title = site_name, title = "Queue", admin = is_admin())
-
 
 @app.route("/get_queue/<last_hash>", methods = ["GET"])
 def get_queue(last_hash):
@@ -386,6 +394,16 @@ def autocomplete():
 	return response
 
 
+@app.route("/downlod_quality" , methods=['GET', 'POST'])
+def downlod_quality():
+	select = request.form.get('comp_select')
+	Settings["quality"] = str(select)
+	with open('settings.json', 'w') as fp:
+		json.dump(Settings, fp, sort_keys=True, indent=4)
+	print(Settings)
+	print(select)
+	return redirect(url_for("info"))
+
 @app.route("/browse", methods = ["GET"])
 def browse():
 	search = bool(request.args.get('q'))
@@ -543,6 +561,8 @@ def info():
 
 	is_pi = get_platform() == "raspberry_pi"
 
+
+
 	return render_template(
 		"info.html",
 		getString1 = getString2,
@@ -559,13 +579,15 @@ def info():
 		use_DNN = K.use_DNN_vocal,
 		norm_vol = K.normalize_vol,
 		pikaraoke_version = VERSION,
-		download_path = K.args.download_path,
+		download_path = Settings["Song_dir"],
+		# download_path = K.args.download_path,
 		num_of_songs = len(K.available_songs),
 		screencapture = get_status(screencapture),
 		vocalsplitter = get_status(vocalsplitter) + vocal_extra,
 		platform = K.platform,
 		admin = is_admin(),
-		admin_enabled = admin_password != None
+		admin_enabled = admin_password != None,
+		data=[{'name': Settings["quality"]}, {'name':'360p'}, {'name':'480p'}, {'name':'720p'}, {'name':'1080p'}]
 	)
 
 
@@ -605,16 +627,6 @@ def update_ytdl():
 		flash(getString(33), "is-danger")
 	return redirect(url_for("home"))
 
-
-@app.route("/refresh")
-def refresh():
-	if (is_admin()):
-		K.get_available_songs()
-	else:
-		flash(getString(34), "is-danger")
-	return redirect(url_for("browse"))
-
-
 @app.route("/bg-process/<cmd>")
 def bg_process(cmd):
 	if cmd == 'streamer-restart':
@@ -626,7 +638,6 @@ def bg_process(cmd):
 	elif cmd == 'vocal-stop':
 		K.vocal_stop()
 	return ''
-
 
 @app.route("/quit")
 def quit():
@@ -673,7 +684,6 @@ def expand_fs():
 		flash(getString(43), "is-danger")
 	return redirect(url_for("home"))
 
-
 # Handle sigterm, apparently cherrypy won't shut down without explicit handling
 signal.signal(signal.SIGTERM, lambda signum, stack_frame: K.stop())
 
@@ -707,17 +717,50 @@ def get_default_dl_dir(platform):
 	if platform == "raspberry_pi":
 		return "/usr/lib/pikaraoke/songs"
 	else:
-		legacy_directory = os.path.expanduser("~/pikaraoke/songs")
+		legacy_directory = os.path.expanduser(Settings["Song_dir"])
 		if os.path.exists(legacy_directory):
+			print("legacy_directory1: "+ legacy_directory)
 			return legacy_directory
 		else:
-			return os.path.expanduser("~/pikaraoke-songs")
+			print("legacy_directory2: "+ legacy_directory)
+			return os.path.expanduser(Settings["Song_dir"])
 
+@app.route("/refresh")
+def refresh():
+	if (is_admin()):
+		K.get_available_songs()
+	else:
+		flash(getString(34), "is-danger")
+	return redirect(url_for("browse"))
+
+@app.route("/set_songpath")
+def set_songpath():
+	if (is_admin()):
+		root = Tk() 
+		root.wm_attributes('-topmost', 1)
+		root.withdraw()
+		filepath=askdirectory(parent = root, initialdir='shell:MyComputerFolder', title="Dialog box")
+		if filepath != "":
+			if not filepath.endswith("/"):
+				filepath += "/"
+				Settings["Song_dir"] = filepath
+				# K.set_download_path()
+				get_default_dl_dir(platform)
+				print("Settings song path change: "+Settings["Song_dir"])
+				try:
+					with open('settings.json', 'w') as fp:
+						json.dump(Settings, fp, sort_keys=True, indent=4)
+				except:
+					pass
+		else:
+			pass
+		return redirect(url_for("info"))	
+				
 
 if __name__ == "__main__":
 
 	platform = get_platform()
-	default_port = 5000
+	default_port = Settings["browser_port"]
 	default_volume = 0
 	default_splash_delay = 3
 	default_log_level = logging.INFO
@@ -727,7 +770,9 @@ if __name__ == "__main__":
 	default_adev = "both"
 	default_youtubedl_path = get_default_youtube_dl_path(platform)
 	default_vlc_path = get_default_vlc_path(platform)
-	default_vlc_port = 5002
+	default_vlc_port = Settings["vlc_port"]
+
+	print("default_dl_dir: "+ default_dl_dir)
 
 	# parse CLI args
 	parser = argparse.ArgumentParser()
@@ -893,7 +938,7 @@ if __name__ == "__main__":
 		sys.exit(1)
 
 	# setup/create download directory if necessary
-	args.dl_path = os.path.expanduser(args.download_path)
+	args.dl_path = os.path.expanduser(Settings["Song_dir"])
 	if not args.dl_path.endswith("/"):
 		args.dl_path += "/"
 	if not os.path.exists(args.dl_path):
@@ -927,5 +972,7 @@ if __name__ == "__main__":
 		cherrypy.engine.start()
 		K.run()
 		cherrypy.engine.exit()
+
+	
 
 	sys.exit()
