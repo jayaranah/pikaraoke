@@ -1,0 +1,9 @@
+{
+    "Song_dir": "C:/Karaoke/",
+    "admin_password": "12345",
+    "browser_port": "5000",
+    "loglevel": "NOTSET",
+    "quality": "1080p",
+    "vlc_port": "5001",
+    "ytpath": "yt-dlp/yt-dlp.exe"
+}
