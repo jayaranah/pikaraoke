@@ -507,10 +507,35 @@ select:-moz-focusring {
 </ul>
 <p class="help-normal">{{getString1(165)}}</p>
 
+
+<h4>{{getString1(198)}}</h4>
+<ul style="list-style-type:none;">
+  <li><a href="/set_songpath"><i class="icon icon-arrows-cw"></i>{{getString1(199)}}</a></li>
+</ul>
+<p class="help-normal">{{getString1(200)}}</p>
+
+
+<h2>{{getString1(201)}}</h2>
+<form class="form-inline" method="POST" action="{{ url_for('downlod_quality') }}">
+  <div class="form-group">
+    <div class="input-group">
+      <span class="input-group-addon">Please select</span>
+      <select name="comp_select" class="selectpicker form-control">
+        {% for o in data %}
+        <option value="{{ o.name }}">{{ o.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-default">Submit</button>
+  </div>
+</form>
+
+
 <h2>{{getString1(166)}}</h2>
 <p>{{getString1(167)}} "{{ youtubedl_version }}"</p>
 <ul style="list-style-type:none;">
-  <li><a id="update-ytdl-link" href="{{ url_for('update_ytdl') }}"><i class="icon icon-arrows-cw"></i>{{getString1(168)}}</a></li>
+  <li><a id="update-ytdl-link" href="{{ url_for('update_ytdl') }}"><i
+        class="icon icon-arrows-cw"></i>{{getString1(168)}}</a></li>
 </ul>
 <p class="help-help-normal">{{getString1(169)}}</p>
 
