@@ -17,15 +17,30 @@ from bidi.algorithm import get_display
 from unidecode import unidecode
 from lib import omxclient, vlcclient
 from lib.get_platform import *
-from app import getString
+from pikaraoke import getString
 
 STD_VOL = 65536/8/np.sqrt(2)
 
 if get_platform() != "windows":
 	from signal import SIGALRM, alarm, signal
 
-settings = codecs.open("settings.json","r","utf-8")
+settings = codecs.open("res/settings.json","r","utf-8")
 Settings = json.load(settings)
+
+listofsong = codecs.open("res/songslist.json","r","utf-8")
+Songdict = json.load(listofsong)
+
+queuehistory = codecs.open("res/queuehistory.json","r","utf-8")
+Qhistory = json.load(queuehistory)
+
+favsong = codecs.open("res/favorite.json","r","utf-8")
+Favoritesong = json.load(favsong)
+
+image_bg = pygame.image.load('res/bg/background.jpg')
+
+
+
+mp.freeze_support()
 
 class Karaoke:
 	raspi_wifi_config_ip = "10.0.0.1"
@@ -36,8 +51,12 @@ class Karaoke:
 	queue = []
 	queue_hash = None
 	available_songs = []
+	favorite_songs = []
+	history_songs = []
 	rename_history = {}
-	songname_trans = {} # transliteration is used for sorting and initial letter search
+	songname_trans = Songdict # transliteration is used for sorting and initial letter search
+	favoritesong_trans = Favoritesong
+	historysong_trans = Qhistory
 	now_playing = None
 	now_playing_filename = None
 	now_playing_user = None
@@ -98,8 +117,6 @@ class Karaoke:
 		self.player_state = {}
 		self.downloading_songs = {}
 		self.log_level = int(args.log_level)
-
-		print("download_path now: " + self.download_path)
 
 		logging.basicConfig(
 			format = "[%(asctime)s] %(levelname)s: %(message)s",
@@ -172,7 +189,11 @@ class Karaoke:
 		self.url = "http://%s:%s" % (self.ip, self.port)
 
 		# get songs from download_path
-		self.get_available_songs()
+		# self.get_available_songs() Remove scanning songs in open karaoke
+
+		self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
+		self.favorite_songs = sorted(self.favoritesong_trans, key = self.favoritesong_trans.get)
+		self.history_songs = sorted(self.historysong_trans, key = self.historysong_trans.get)
 
 		self.get_youtubedl_version()
 
@@ -230,6 +251,17 @@ class Karaoke:
 				ssl_enabled = line.split("d=")[1].strip()
 
 		return (server_port, ssid_prefix, ssl_enabled)
+
+
+	def save_settings(self):
+		logging.info("Saving settings")
+		f = codecs.open('res/settings.json','w','utf-8')
+		json.dump(Settings, f, sort_keys=True, indent=4, ensure_ascii=False)
+
+	def save_favorite(self):
+		f = codecs.open('res/favorite.json','w','utf-8')
+		json.dump(Favoritesong, f, sort_keys=True, indent=4, ensure_ascii=False)
+
 
 	def get_youtubedl_version(self):
 		self.youtubedl_version = (check_output([self.youtubedl_path, "--version"]).strip().decode("utf8"))
@@ -326,12 +358,14 @@ class Karaoke:
 		return v*r
 
 	def render_splash_screen(self):
+		
 		if self.hide_splash_screen:
 			return
 
 		# Clear the screen and start
 		logging.debug("Rendering splash screen")
 		self.screen.fill((0, 0, 0))
+		
 		blitY = self.ref_H - 40
 		sysfont_size = 30
 
@@ -339,12 +373,22 @@ class Karaoke:
 		text = self.render_font(sysfont_size * 2, getString(136), (255, 255, 255))
 		if not hasattr(self, 'logo'):
 			self.logo = pygame.image.load(self.logo_path)
+			
 		_, _, W, H = self.normalize(list(self.logo.get_rect()))
 		center = self.screen.get_rect().center
+
+		sizes_w = self.screen.get_width()
+		sizes_h = self.screen.get_height()
+
+		bg_img = pygame.transform.scale(image_bg,(sizes_w, sizes_h))
+		self.screen.blit(bg_img, (0,0))
+
 		self.logo1 = pygame.transform.scale(self.logo, (W, H))
 		self.screen.blit(self.logo1, (center[0]-W/2, center[1]-H/2-text[1].height/2))
 		self.screen.blit(text[0], (center[0]-text[1].width/2, center[1]+H/2))
+		# self.screen.blit(bg_img, (0,0))
 
+		
 		if not self.hide_ip:
 			qr_size = 150
 			if not hasattr(self, 'p_image'):
@@ -408,6 +452,7 @@ class Karaoke:
 			self.screen.blit(text1[0], self.normalize((20, 20)))
 			text2 = self.render_font(sysfont_size, getString(197) + ': %d'%len(self.available_songs), (255, 255, 0))
 			self.screen.blit(text2[0], self.normalize((20, 30+sysfont_size)))
+			
 
 	def render_font(self, sizes, text, *kargs):
 		if type(sizes) != list:
@@ -502,18 +547,15 @@ class Karaoke:
 		self.downloading_songs[song_url] = 1
 		dl_path = "%(title)s---%(id)s.%(ext)s"
 
-		settings = codecs.open("settings.json","r","utf-8")
+		settings = codecs.open("res/settings.json","r","utf-8")
 		Settings = json.load(settings)
 
 		if Settings["quality"] == "360p":
 			opt_quality = ['-f', '18+140']
-
 		elif Settings["quality"] == "480p":
 			opt_quality = ['-f', '135+140']
-
 		elif Settings["quality"] == "720p":
 			opt_quality = ['-f', '22+140']
-			
 		elif Settings["quality"] == "1080p":
 			opt_quality = ['-f', '137+140']
 
@@ -531,15 +573,22 @@ class Karaoke:
 			logging.debug("Song successfully downloaded: " + song_url)
 			self.downloading_songs[song_url] = 0
 			bn = self.get_downloaded_file_basename(song_url)
+			bnn = bn.split("---")
+			bnnn = bnn[0]+".mp4"
+
 			if bn:
-				shutil.move(self.download_path+'tmp/'+bn, self.download_path+bn)
-				self.get_available_songs()
+				shutil.move(self.download_path+'tmp/'+bn, self.download_path+bnnn)
+				# self.get_available_songs() Remove scanning files
 				if enqueue:
 					if self.platform == "windows":
-						dpath = str(PureWindowsPath(self.download_path+bn))
+						dpath = str(PureWindowsPath(self.download_path+bnnn))
+						self.songname_trans[dpath] = bnnn.lower()
+						with open('res/songslist.json', 'w') as fp:
+							json.dump(self.songname_trans, fp, sort_keys=True, indent=4)
 						self.enqueue(dpath, song_added_by)
+						self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
 					else:
-						self.enqueue(self.download_path+bn, song_added_by)
+						self.enqueue(self.download_path+bnnn, song_added_by)
 					self.downloading_songs[song_url] = '00'
 			else:
 				logging.error("Error queueing song: " + song_url)
@@ -550,17 +599,20 @@ class Karaoke:
 		return rc
 
 	def get_available_songs(self):
-		logging.info("Fetching available songs in: " + self.download_path)
-		files_grabbed = []
+		settings = codecs.open("res/settings.json","r","utf-8")
+		Settings = json.load(settings)
+		logging.info("Fetching available songs in: " + Settings["Song_dir"])
+		# files_grabbed = []
+		
 		self.songname_trans = {}
 		if self.platform == "windows":
-			P=Path(self.download_path)
+			P=Path(Settings["Song_dir"])
 			for file in P.rglob('*.*'):
 				base, ext = os.path.splitext(file.as_posix())
 				if ext.lower() in media_types:
 					if os.path.isfile(file.as_posix()):
 						if os.path.splitext(file)[1].lower() in media_types:
-							files_grabbed.append(file)
+							# files_grabbed.append(file)
 							trans = unidecode(self.filename_from_path(file)).lower()
 							while trans and not trans[0].islower() and not trans[0].isdigit():
 								trans = trans[1:]
@@ -571,7 +623,7 @@ class Karaoke:
 				fn = self.download_path + bn
 				if not bn.startswith('.') and os.path.isfile(fn):
 					if os.path.splitext(fn)[1].lower() in media_types:
-						files_grabbed.append(fn)
+						# files_grabbed.append(fn)
 						trans = unidecode(self.filename_from_path(fn)).lower()
 						# strip leading non-transliterable symbols
 						while trans and not trans[0].islower() and not trans[0].isdigit():
@@ -579,6 +631,8 @@ class Karaoke:
 						self.songname_trans[fn] = trans
 
 		# self.available_songs = sorted(files_grabbed, key = lambda f: str.lower(os.path.basename(f)))
+		with open('res/songslist.json', 'w') as fp:
+			json.dump(self.songname_trans, fp, sort_keys=True, indent=4)
 		self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
 
 	def get_all_assoc_files(self, song_path):
@@ -639,7 +693,16 @@ class Karaoke:
 				item['title'] = self.filename_from_path(item['file'])
 				break
 
-		self.get_available_songs()
+		sdirname = os.path.dirname(song_path)
+		ospath = str(PureWindowsPath(sdirname+"/"+new_basename))
+
+		del self.songname_trans[song_path]
+		self.songname_trans[ospath] = new_basestem.lower()
+		with open('res/songslist.json', 'w') as fp:
+			json.dump(self.songname_trans, fp, sort_keys=True, indent=4)
+		self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
+
+
 
 	def filename_from_path(self, file_path):
 		rc = os.path.basename(file_path)
@@ -723,11 +786,29 @@ class Karaoke:
 			logging.info("'%s' is adding song to queue: %s" % (user, song_path))
 			self.queue.append({"user": user, "file": song_path, "title": self.filename_from_path(song_path)})
 			self.update_queue_hash()
+
+			Qhistory[song_path] = self.filename_from_path(song_path).lower()
+			self.history_songs = sorted(self.historysong_trans, key = self.historysong_trans.get)
+			with open('res/queuehistory.json', 'w') as fp:
+				json.dump(Qhistory, fp, sort_keys=True, indent=4)
 			return True
 
 	def queue_add_random(self, amount):
 		logging.info("Adding %d random songs to queue" % amount)
-		songs = list(self.available_songs)  # make a copy
+
+		settings = codecs.open("res/settings.json","r","utf-8")
+		Settings = json.load(settings)
+
+		if Settings["randomsongpath"] == "Default":
+			songs = list(self.songname_trans)  # make a copy
+			print("Adding Song from songname_trans")
+		elif Settings["randomsongpath"] == "History":
+			songs = list(Qhistory)
+			print("Adding Song from history")
+		elif Settings["randomsongpath"] == "Favorite":
+			songs = list(Favoritesong)
+			print("Adding Song from Favorite")
+			
 		if len(songs) == 0:
 			logging.warn("No available songs!")
 			return False
@@ -737,8 +818,20 @@ class Karaoke:
 			if self.is_song_in_queue(songs[r]):
 				logging.warn("Song already in queue, trying another... " + songs[r])
 			else:
-				self.queue.append({"user": "Randomizer", "file": songs[r], "title": self.filename_from_path(songs[r])})
-				i += 1
+				if os.path.isfile(songs[r]) == True:
+					self.queue.append({"user": "Randomizer", "file": songs[r], "title": self.filename_from_path(songs[r])})
+					i += 1
+				else:
+					if songs[r] in Favoritesong:
+						del Favoritesong[songs[r]]
+						logging.warn("Deleting in Favoritesong not exist: "+ songs[r])
+						with open('res/favorite.json', 'w') as fp:
+							json.dump(Favoritesong, fp, sort_keys=True, indent=4)
+					if songs[r] in Qhistory:
+						del Qhistory[songs[r]]
+						logging.warn("Deleting in Qhistory not exist: "+ songs[r])
+						with open('res/queuehistory.json', 'w') as fp:
+							json.dump(Qhistory, fp, sort_keys=True, indent=4)
 			songs.pop(r)
 			if len(songs) == 0:
 				self.update_queue_hash()
