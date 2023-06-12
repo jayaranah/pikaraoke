@@ -1,0 +1,11 @@
+{
+    "Song_dir": "D:/Karaoke/Temporarykar/",
+    "admin_password": "12345",
+    "browser_port": "5050",
+    "loglevel": "NOTSET",
+    "quality": "480p",
+    "randomsongpath": "Default",
+    "song_list": "Default",
+    "vlc_port": "5051",
+    "ytpath": "yt-dlp/yt-dlp.exe"
+}
