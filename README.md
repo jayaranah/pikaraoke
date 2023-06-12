@@ -10,6 +10,7 @@ What's New in this Fork:
 6. FFmpeg environment variable setup is no longer required. FFmpeg is included in the zip file. Run Setup_FFmpeg.exe to install it.
 7. Auto-generated SRT added as "Up Next" song notice on the screen, effective for MP4 files. Display time: 30-40 seconds and 2:00-2:10 minutes. If no next song, "Please select a song" is displayed due to VLC holding the SRT file during playback.
 8. Other optimizations.
+
 Note: This update is compatible with Windows operating system only.
 
 
