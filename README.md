@@ -1,7 +1,7 @@
 # PiKaraoke (The World's best open-source Python-based YouTube Karaoke system)
-
+---------------------------------------
 What's New in this Fork:
-
+---------------------------------------
 1. The song database has been migrated from JSON to SQLite3.
 2. The selection button on the browse page has been replaced with a radio button.
 3. Song count has been added for the favorite songs in the favorite list.
@@ -11,9 +11,10 @@ What's New in this Fork:
 7. Auto-generated SRT added as "Up Next" song notice on the screen, effective for MP4 files. Display time: 30-40 seconds and 2:00-2:10 minutes. If no next song, "Please select a song" is displayed due to VLC holding the SRT file during playback.
 8. Other optimizations.
 
-Note: This update is compatible with Windows operating system only.
-
-
+Note: This fork is specifically developed for the Windows operating system. It may require significant modifications and recoding to make it compatible with other operating systems such as Raspberry Pi or Linux.
+---------------------------------------
+The content below has not been updated.
+---------------------------------------
 This is the world's best open-source Python-based YouTube Karaoke system up to today (2022.4), forked from @vicwomg's repo (thanks) and thoroughly revamped and incorporated @tsurumeso's DNN-based (deep neural network) vocal splitter (thanks to https://github.com/tsurumeso/vocal-remover). PiKaraoke is a "KTV"-style Karaoke song search and queueing system. It connects to your TV either via an HDMI cable, or screen sharing, or using TV's web-browser (backend KTV player is screen-captured and streamed to HTTP), and shows a QR code for computers and smartphones to connect to a web interface. From there, multiple users can seamlessly search your local track library, queue up songs, add an endless selection of new Karaoke tracks from YouTube, and more. Works on Raspberry Pi, OSX, Windows, and Linux!
 See a demo on YouTube: [![Img alt text](https://img.youtube.com/vi/kmQax0EhAxE/0.jpg)](https://www.youtube.com/watch?v=kmQax0EhAxE)
 
