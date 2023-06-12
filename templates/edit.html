@@ -130,8 +130,52 @@
   </form>
 </div>
 
-<hr>
-<a class="edit-button confirm-delete has-text-danger is-pulled-right"
-  href="{{url_for('delete_file')}}?song={{url_escape(song)}}"><i class="icon icon-trash-empty"></i>Delete this song</a><br>
+<div class="details-delete">
+  <details>
+    <summary class="summary-right"><i class="icon icon-info-circled"></i></summary>
+    <p class="help help-right">This will not delete the song file if it has the Read-only attribute.</p>
+  </details>
+  <a class="edit-button confirm-delete has-text-danger is-pulled-right"
+    href="{{url_for('delete_file')}}?song={{url_escape(song)}}">
+    <i class="icon icon-trash-empty"></i>Delete this song
+  </a>
+</div>
+<br><br>
+
+<style>
+
+summary.summary-right {
+  float: right;
+}
+
+p.help-right {
+  text-align: right;
+}
+
+
+details {
+  user-select: none;
+}
+
+details>summary i.icon {
+  width: 24px;
+  height: 24px;
+  transition: all 0.3s;
+  margin-left: 10px;
+}
+
+details[open] summary i.icon {
+  transform: rotate(180deg);
+}
+
+summary {
+  display: flex;
+  cursor: pointer;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+</style>
 
 {% endblock %}
