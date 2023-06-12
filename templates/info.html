@@ -1,4 +1,5 @@
 {% extends 'base.html' %} {% block scripts %}
+
 <script>
   function sleep(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
@@ -74,7 +75,9 @@
       $.get("/bg-process/vocal-restart", async function (data){ await sleep(200); location.reload(true); });
     });
   });
+
 </script>
+
 {% endblock %} {% block header %}
 <style>
 .help-normal {
@@ -148,7 +151,7 @@ input:checked + .slider:before {
 
 .button{
   display: inline-block;
-  *display: inline;
+  /* *display: inline; */
   zoom: 1;
   padding: 6px 20px;
   margin: 0;
@@ -300,7 +303,7 @@ input:checked + .slider:before {
 .button-group,
 .button-group li{
   display: inline-block;
-  *display: inline;
+  /* display: inline; */
   zoom: 1;
 }
 
@@ -310,10 +313,10 @@ input:checked + .slider:before {
   padding: 0;
   background: rgba(0, 0, 0, .1);
   border-bottom: 1px solid rgba(0, 0, 0, .1);
-  padding: 7px;
-  -moz-border-radius: 7px;
-  -webkit-border-radius: 7px;
-  border-radius: 7px;
+  padding: 2px;
+  -moz-border-radius: 2px;
+  -webkit-border-radius: 2px;
+  border-radius: 2px;
 }
 
 .button-group li{
@@ -359,25 +362,40 @@ input:checked + .slider:before {
 
 
 /* Language select */
-select {
-
-  /* styling */
-  background-color: white;
-  border: thin solid blue;
-  border-radius: 4px;
+.select {
+  cursor: pointer;
   display: inline-block;
-  font: inherit;
-  line-height: 1.5em;
-  padding: 0.5em 2.5em 0.5em 1em;
+  position: relative;
+  font: normal 11px/22px Arial, Sans-Serif;
+  color: black;
+  border: 1px solid #ccc;
+}
 
-  /* reset */
+.styledSelect {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-color: white;
+  padding: 0 10px;
+  font-weight: bold;
+}
 
-  margin: 0;      
-  -webkit-box-sizing: border-box;
-  -moz-box-sizing: border-box;
-  box-sizing: border-box;
-  -webkit-appearance: none;
-  -moz-appearance: none;
+.styledSelect:after {
+  content: "";
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+  border-color: black transparent transparent transparent;
+  position: absolute;
+  top: 9px;
+  right: 6px;
+}
+
+.styledSelect:active,
+.styledSelect.active {
+  background-color: #eee;
 }
 
 
@@ -420,21 +438,43 @@ select:-moz-focusring {
   color: transparent;
   text-shadow: 0 0 0 #000;
 }
+
+details {
+  user-select: none;
+}
+
+details>summary i.icon {
+  width: 24px;
+  height: 24px;
+  transition: all 0.3s;
+  margin-left: 5px;
+}
+
+details[open] summary i.icon {
+  transform: rotate(180deg);
+}
+
+summary {
+  display: flex;
+  cursor: pointer;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
 </style>
 
 <h1>{% block title %}{{getString1(142)}}{% endblock %}</h1>
 {% endblock %} {% block content %}
 
-<hr/>
-
-
+<hr />
 <div class="has-text-centered">
   <p>URL of {{site_title}}:</p>
   <p class="is-size-4 has-text-warning has-text-centered">{{ url }}</p>
   <p>{{getString1(143)}}</p>
-<img id="qr-img" width="300px" src="{{ url_for('qrcode') }}" style="image-rendering: pixelated" />
+  <img id="qr-img" width="300px" src="{{ url_for('qrcode') }}" style="image-rendering: pixelated" />
 </div>
-
 <hr />
 
 <h1>{{getString1(182)}}</h1>
@@ -450,20 +490,46 @@ select:-moz-focusring {
   <li>{{getString1(149)}}: {{ youtubedl_version }}</li>
   <li>{{getString1(150)}}: {{ pikaraoke_version }}</li>
 </ul>
-
+<details>
+  <summary>
+    <h4>Other Info</h4><i class="icon icon-info-circled"> </i>
+  </summary>
+  <ul>
+    <li>Moded by: Karaoke Real Sound</li>
+    <li>Release Date: 06-12-2023</li>
+  </ul>
+  Github Links:
+  <ul>
+    <li>My Fork: <a href="https://github.com/jayaranah/pikaraoke">jayaranah</a> Not updated</li>
+    <li>Fork from: <a href="https://github.com/xuancong84/pikaraoke">xuancong84</a></li>
+    <li>Original repository: <a href="https://github.com/vicwomg/pikaraoke">vicwomg</a></li>
+  </ul>
+</details>
 <hr />
 
 {% if admin %}
-<h2>{{getString1(151)}}</h2>
-<h4>{{getString1(194)}}
-  <label style="vertical-align:middle; margin: 5px" class="switch">
-    <input id="norm-vol" type="checkbox" {% if norm_vol %}checked{% endif %}>
-    <span class="slider round"></span>
-  </label>
-</h4>
-<p class="help-normal">{{getString1(195)}}</p>
 
-<h4>{{getString1(152)}}</h4>
+<h2>{{getString1(151)}}</h2>
+
+<details>
+  <summary>
+    <h4>{{getString1(194)}}</h4><i class="icon icon-info-circled"> </i>
+  </summary>
+  <p class="help-normal">{{getString1(195)}}</p>
+</details>
+
+<label style="vertical-align:middle; margin: 5px" class="switch">
+  <input id="norm-vol" type="checkbox" {% if norm_vol %}checked{% endif %}>
+  <span class="slider round"></span>
+</label>
+
+<p></p>
+<details>
+  <summary>
+    <h4>{{getString1(152)}}</h4><i class="icon icon-info-circled"> </i>
+  </summary>
+    <p class="help">{{getString1(155)}}</p>
+</details>
 <div class="is-flex" style="align-items:center">
   <span style="vertical-align:middle; text-align:center;">{{getString1(153)}}</span>
   <label style="vertical-align:middle; margin: 5px" class="switch">
@@ -472,14 +538,19 @@ select:-moz-focusring {
   </label>
   <span style="vertical-align:middle; text-align:center;">{{getString1(154)}}</span>
 </div>
-<p class="help">{{getString1(155)}}</p>
 
-<h4 style="margin-bottom:0">{{getString1(148)}}:</h4>
+<p></p>
+<details>
+  <summary>
+    <h4>{{getString1(148)}}</h4><i class="icon icon-info-circled"> </i>
+  </summary>
+    <p class="help-normal">{{getString1(158)}}</p>
+</details>
 <ul class="button-group">
   <li><button id="vocal-stop" class="red button" style="width:150px">{{getString1(156)}}</button></li>
   <li><button id="vocal-restart" class="green button" style="width:150px">{{getString1(157)}}</button></li>
 </ul>
-<p class="help-normal">{{getString1(158)}}</p>
+
 
 {% if platform == 'linux' %}
 <h4 style="margin-bottom:0">{{getString1(159)}}</h4>
@@ -490,54 +561,81 @@ select:-moz-focusring {
 <p class="help-normal">{{getString1(162)}}</p>
 {% endif %}
 
-<h4>{{getString1(186)}}</h4>
+
+
+<p></p>
+<details>
+  <summary>
+    <h4>{{getString1(186)}}</h4><i class="icon icon-info-circled"> </i>
+  </summary>
+    <p class="help-normal">{{getString1(188)}}</p>
+</details>
 <p>
   {{getString1(187)}}
-  <select class="Round" onchange="setServerLang(this.value)">
+  <select onchange="setServerLang(this.value)">
     {% for k, v in langs.items() %}
       <option value="{{k}}" {{ "selected" if k==lang }}>{{v[1]}}</option>
     {% endfor %}
   </select>
 </p>
-<p class="help-normal">{{getString1(188)}}</p>
-
-<h4>{{getString1(163)}}</h4>
-<ul style="list-style-type:none;">
-  <li><a href="/refresh"><i class="icon icon-arrows-cw"></i>{{getString1(164)}}</a></li>
-</ul>
-<p class="help-normal">{{getString1(165)}}</p>
 
 
-<h4>{{getString1(198)}}</h4>
-<ul style="list-style-type:none;">
-  <li><a href="/set_songpath"><i class="icon icon-arrows-cw"></i>{{getString1(199)}}</a></li>
-</ul>
-<p class="help-normal">{{getString1(200)}}</p>
 
+<p></p>
+<details>
+  <summary>
+    <h4>{{getString1(163)}}</h4><i class="icon icon-info-circled"> </i>
+  </summary>
+    <p class="help-normal">{{getString1(165)}}</p>
+</details>
+<a href="/refresh"><i class="icon icon-arrows-cw"></i>{{getString1(164)}}</a>
 
-<h2>{{getString1(201)}}</h2>
+<p></p>
+<details>
+  <summary>
+    <h4>{{getString1(198)}}</h4><i class="icon icon-info-circled"> </i>
+  </summary>
+  <p>
+    <p class="help-normal">{{getString1(200)}}</p>
+  </p>
+</details>
+<a href="/set_songpath"><i class="icon icon-folder-open"></i>{{getString1(199)}}</a>
+<p></p>
+
+<details>
+  <summary>
+    <h4>{{getString1(201)}} </h4><i class="icon icon-info-circled"></i>
+  </summary>
+  <p>
+    High quality download uses more storage
+  </p>
+</details>
 <form class="form-inline" method="POST" action="{{ url_for('downlod_quality') }}">
   <div class="form-group">
-    <div class="input-group">
-      <span class="input-group-addon">Please select</span>
-      <select name="comp_select" class="selectpicker form-control">
-        {% for o in data %}
-        <option value="{{ o.name }}">{{ o.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <button type="submit" class="btn btn-default">Submit</button>
+    <select name="comp_select">
+      {% for o in data %}
+      <option value="{{ o.name }}">{{ o.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Submit</button>
   </div>
 </form>
+<p></p>
 
 
-<h2>{{getString1(166)}}</h2>
-<p>{{getString1(167)}} "{{ youtubedl_version }}"</p>
-<ul style="list-style-type:none;">
-  <li><a id="update-ytdl-link" href="{{ url_for('update_ytdl') }}"><i
-        class="icon icon-arrows-cw"></i>{{getString1(168)}}</a></li>
-</ul>
-<p class="help-help-normal">{{getString1(169)}}</p>
+<p></p>
+<details>
+  <summary>
+    <h4>Youtube-dl (yt-dlp) version: {{ youtubedl_version }}</h4> <i class="icon icon-info-circled"> </i>
+  </summary>
+  <p>
+    {{getString1(167)}} "{{ youtubedl_version }}"
+    <i class="help-help-normal">{{getString1(169)}}</i>
+  </p>
+</details>
+<a id="update-ytdl-link" href="{{ url_for('update_ytdl') }}"><i class="icon icon-arrows-cw"></i>{{getString1(168)}}</a>
+
+
 
 <h2>{{getString1(170)}}</h2>
 <p>{{getString1(171)}}</p>
