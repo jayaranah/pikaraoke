@@ -91,7 +91,7 @@ Increase Audio Delay
  semitones
 Please enter your name. This will show up next to the songs you queue up from this device.
 Song added to the queue: 
-Song already in the queue: 
+Song already in queue or File not found:
 Sort by Date
 Sort by Alphabetical
 Add '%s' to the queue
@@ -105,7 +105,7 @@ Edit song
 Move up in queue
 Move down in queue
 Are you sure you want to delete from the queue
-Are you sure you want to clear the ENTIRE queue? Type 'OK' to continue
+Are you sure you want to clear the ENTIRE queue? Type [OK] to continue
 Add 3 random songs
 Clear all
 The queue is empty
@@ -195,8 +195,17 @@ Volume Normalization
 Different songs often have different volume. Enabling volume normalization will first run <i>ffmpeg</i> to compute the global volume of a song and automatically adjust player volume so that every song sounds equally loud.
 Song library download path
 Total number of songs
-Change song directory
+Change song directory:
 Select directory
-Changing song directory need to restart pikaraoke to take effect.
-Download Quality
+Refresh song list after changing directory.
+Download Quality:
 Select Quality
+Random Song From:
+❤️
+Added to Favorite: 
+Song alredy in the favorite!
+Add '%s' to the favorite
+Default - Songs from default directory.
+Favorite - Favorite songs are added from browse page.
+History - History songs are only save when queueing from search add browse page.
+📒 - All songs added by radomizer will not save to history
