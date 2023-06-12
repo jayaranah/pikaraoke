@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-import datetime
+# import datetime
 import json, codecs
 import locale
 import logging
@@ -33,19 +33,72 @@ try:
 except ImportError:
 	from urllib import quote, unquote
 
-# from tkinter import filedialog
 from tkinter import Tk
 from tkinter.filedialog import askdirectory
-import cgi
+import datetime
+from datetime import datetime, timedelta
+import sqlite3
 
-settings = codecs.open("settings.json","r","utf-8")
+
+def get_db_connection():
+    conn = sqlite3.connect('database.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_database():
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS songbook_table (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_name TEXT,
+        artist TEXT,
+        title TEXT,
+		company TEXT,
+		date_time TEXT,
+	    song_path TEXT
+    )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS history_table (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+		song_id INTEGER,
+        date_time TEXT,
+		selectedby TEXT,
+		FOREIGN KEY (song_id) REFERENCES songbook_table (id)
+    	)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS favorite_table (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+		song_id INTEGER,
+        date_time TEXT,
+		selectedby TEXT,
+		FOREIGN KEY (song_id) REFERENCES songbook_table (id)
+    	)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS srt_table (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        srt_path TEXT
+    	)''')
+    
+    conn.commit()
+    conn.close()
+
+init_database()
+
+settings = codecs.open("res/settings.json","r","utf-8")
 Settings = json.load(settings)
+
 
 if Settings["loglevel"] != "NOTSET":
 	logging.basicConfig(filename='tmp/myapp.log', level=Settings["loglevel"], 
 						format='%(asctime)s %(levelname)s %(name)s %(filename)s %(lineno)d %(message)s')
 	logger=logging.getLogger(__name__)
-	
+
+def save_settings():
+    f = codecs.open('res/settings.json','w','utf-8')
+    json.dump(Settings, f, sort_keys=True, indent=4, ensure_ascii=False)
+
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 site_name = "PiKaraoke"
@@ -54,10 +107,12 @@ os.texts = defaultdict(lambda: "")
 getString = lambda ii: os.texts[ii]
 getString1 = lambda lang, ii: os.langs[lang].get(ii, os.langs['en_US'][ii])
 
+
 # Define global symbols for Jinja templates 
 @app.context_processor
 def inject_stage_and_region():
 	return {'getString': getString, 'getString1': getString}
+
 
 @app.before_request
 def preprocessor():
@@ -82,7 +137,6 @@ def filename_from_path(file_path, remove_youtube_id = True):
 			rc = rc.split("---".encode("utf-8"))[0]
 	return rc
 
-
 def url_escape(filename):
 	return quote(filename.encode("utf8"))
 
@@ -94,7 +148,6 @@ def is_admin():
 		if (a == admin_password):
 			return True
 	return False
-
 
 @app.route("/")
 def home():
@@ -113,7 +166,6 @@ def home():
 		audio_delay = s['audiodelay'],
 		vocal_info = K.get_vocal_info(),
 	)
-
 
 @app.route("/nowplaying")
 def nowplaying():
@@ -149,7 +201,6 @@ def nowplaying():
 def get_lang_list():
 	return json.dumps({k: v[1] for k, v in os.langs.items()}, sort_keys = False)
 
-
 @app.route("/change_language/<language>")
 def change_language(language):
 	try:
@@ -164,8 +215,8 @@ def auth():
 	p = d["admin-password"]
 	if (p == admin_password):
 		resp = make_response(redirect('/'))
-		expire_date = datetime.datetime.now()
-		expire_date = expire_date + datetime.timedelta(days = 90)
+		expire_date = datetime.now()
+		expire_date = expire_date + timedelta(days = 90)
 		resp.set_cookie('admin', admin_password, expires = expire_date)
 		flash(getString(1), "is-success")
 	else:
@@ -173,11 +224,9 @@ def auth():
 		flash(getString(2), "is-danger")
 	return resp
 
-
 @app.route("/login")
 def login():
 	return render_template("login.html")
-
 
 @app.route("/logout")
 def logout():
@@ -185,7 +234,6 @@ def logout():
 	resp.set_cookie('admin', '')
 	flash(getString(3), "is-success")
 	return resp
-
 
 @app.route("/get_vocal_todo_list/<vocal_device>")
 def get_vocal_todo_list(vocal_device):
@@ -197,28 +245,34 @@ def get_vocal_todo_list(vocal_device):
 	q = ([K.now_playing_filename] if K.now_playing_filename else []) + [i['file'] for i in K.queue]
 	return json.dumps({'download_path': K.download_path, 'queue': q, 'use_DNN': K.use_DNN_vocal})
 
-
 @app.route("/set_vocal_mode/<mode>")
 def set_vocal_mode(mode):
 	K.use_DNN_vocal = (mode.lower() == 'true')
 	K.play_vocal()
 	return ''
 
-
 @app.route("/norm_vol/<mode>", methods = ["GET"])
 def norm_vol(mode):
 	K.enable_vol_norm(mode.lower() == 'true')
 	return ''
 
-
 @app.route("/queue")
 def queue():
-	return render_template("queue.html", getString1 = lambda ii: getString1(request.client_lang, ii), queue = K.queue, site_title = site_name, title = "Queue", admin = is_admin())
+	return render_template(
+		"queue.html", 
+		getString1 = lambda ii: getString1(request.client_lang, ii), 
+		queue = K.queue, 
+		site_title = site_name, 
+		title = "Queue", 
+		admin = is_admin(),
+		defaultsong = len(K.songbook_table),
+		favoritesong = len(K.favorite_table),
+		historysong = len(K.history_table),
+		rdata = Settings["randomsongpath"])
 
 @app.route("/get_queue/<last_hash>", methods = ["GET"])
 def get_queue(last_hash):
 	return json.dumps([K.queue, K.queue_hash]) if last_hash != K.queue_hash else ''
-
 
 @app.route("/queue/addrandom", methods = ["GET"])
 def add_random():
@@ -229,7 +283,6 @@ def add_random():
 	else:
 		flash(getString(5), "is-warning")
 	return redirect(url_for("queue"))
-
 
 @app.route("/queue/edit", methods = ["GET"])
 def queue_edit():
@@ -274,86 +327,140 @@ def queue_edit():
 				flash(getString(15) + song, "is-danger")
 	return redirect(url_for("queue"))
 
+import os
 
-@app.route("/enqueue", methods = ["POST", "GET"])
+@app.route("/enqueue", methods=["POST", "GET"])
 def enqueue():
-	if "song" in request.args:
-		song = request.args["song"]
+	if "song[6]" in request.args:
+		song = request.args["song[6]"]
 	else:
 		d = request.form.to_dict()
 		song = d["song-to-add"]
+
 	if "user" in request.args:
 		user = request.args["user"]
 	else:
 		d = request.form.to_dict()
 		user = d["song-added-by"]
-	rc = K.enqueue(song, user)
-	song_title = filename_from_path(song)
-	return json.dumps({"song": song_title, "success": rc})
 
+	if os.path.exists(song):
+		rc = K.enqueue(song, user)
+		song_title = filename_from_path(song)
+		return json.dumps({"song": song_title, "success": rc})
+	else:
+		conn = get_db_connection()
+		c = conn.cursor()
+		c.execute("SELECT id FROM songbook_table WHERE song_path = ?", (song,))
+		row = c.fetchone()
+		if row is not None:
+			c.execute("DELETE FROM history_table WHERE song_id = ?", (row[0],))
+			c.execute("DELETE FROM favorite_table WHERE song_id = ?", (row[0],))
+			c.execute("DELETE FROM songbook_table WHERE id = ?", (row[0],))
+
+			c.execute("SELECT * FROM songbook_table ORDER BY file_name")
+			songbook_table = c.fetchall()
+			K.songbook_table = songbook_table
+
+			#Favorite Song Book
+			c.execute('''
+				SELECT songbook_table.*, favorite_table.*
+				FROM favorite_table
+				INNER JOIN songbook_table ON favorite_table.song_id = songbook_table.id
+			''')
+			favorite_table = c.fetchall()
+			K.favorite_table = favorite_table
+
+			#History Song Book
+			c.execute('''
+				SELECT songbook_table.*, history_table.*
+				FROM history_table
+				INNER JOIN songbook_table ON history_table.song_id = songbook_table.id
+				ORDER BY history_table.date_time DESC
+			''')
+			history_table = c.fetchall()
+			K.history_table = history_table
+
+		conn.commit()
+		conn.close()
+		return json.dumps({"song": song, "danger": song})  # File not found
+
+
+@app.route("/favorite", methods = ["POST", "GET"])
+def favorite():
+	song = request.args["song[6]"] #path
+	song_title = filename_from_path(song) #filename
+	user = request.args["user"]
+
+	conn = get_db_connection()
+	c = conn.cursor()
+	c.execute('SELECT id FROM songbook_table WHERE song_path = ?', (song,))
+	song_id = c.fetchone()
+	date_time = datetime.now()
+
+	c.execute('''INSERT INTO favorite_table (song_id, date_time, selectedby)
+				VALUES (?, ?, ?)''',
+			(song_id[0], date_time, user))
+	c.execute('''
+		SELECT songbook_table.*, favorite_table.*
+		FROM favorite_table
+		INNER JOIN songbook_table ON favorite_table.song_id = songbook_table.id
+	''')
+	K.favorite_table = c.fetchall()
+	conn.commit()
+	conn.close()
+	return json.dumps({"song": song_title, "success": song})
 
 @app.route("/skip")
 def skip():
 	K.skip()
 	return ''
 
-
 @app.route("/pause")
 def pause():
 	K.pause()
 	return json.dumps(K.is_paused)
-
 
 @app.route("/transpose/<semitones>", methods = ["GET"])
 def transpose(semitones):
 	K.play_transposed(semitones)
 	return ''
 
-
 @app.route("/play_vocal/<mode>", methods = ["GET"])
 def play_vocal(mode):
 	K.play_vocal(mode)
 	return ''
-
 
 @app.route("/seek/<goto_sec>", methods = ["GET"])
 def seek(goto_sec):
 	K.seek(goto_sec)
 	return ''
 
-
 @app.route("/audio_delay/<delay_val>", methods = ["GET"])
 def audio_delay(delay_val):
 	res = K.set_audio_delay(delay_val)
 	return json.dumps(res)
-
 
 @app.route("/subtitle_delay/<delay_val>", methods = ["GET"])
 def subtitle_delay(delay_val):
 	res = K.set_subtitle_delay(delay_val)
 	return json.dumps(res)
 
-
 @app.route("/restart")
 def restart():
 	K.restart()
 	return redirect(url_for("home"))
 
-
 @app.route("/vol_up")
 def vol_up():
 	return str(K.vol_up())
-
 
 @app.route("/vol_down")
 def vol_down():
 	return str(K.vol_down())
 
-
 @app.route("/vol/<volume>")
 def vol_set(volume):
 	return str(K.vol_set(volume))
-
 
 @app.route("/search", methods = ["GET"])
 def search():
@@ -373,55 +480,95 @@ def search():
 		getString1 = lambda ii: getString1(request.client_lang, ii),
 		site_title = site_name,
 		title = "Search",
-		songs = K.available_songs,
+		songs = K.songbook_table,
 		search_results = search_results,
 		search_string = search_string,
 		search_nonkaraoke = search_nonkaraoke
 	)
 
-
 @app.route("/autocomplete")
 def autocomplete():
 	q = request.args.get('q').lower()
 	result = []
-	for each in K.available_songs:
-		if q in each.lower():
-			result.append({"path": each, "fileName": K.filename_from_path(each), "type": "autocomplete"})
+	for each in K.songbook_table:
+		if q in each[6].lower():
+			result.append({"path": each[6], "fileName": K.filename_from_path(each[6]), "type": "autocomplete"})
 	response = app.response_class(
 		response = json.dumps(result),
 		mimetype = 'application/json'
 	)
 	return response
 
-
 @app.route("/downlod_quality" , methods=['GET', 'POST'])
 def downlod_quality():
 	select = request.form.get('comp_select')
 	Settings["quality"] = str(select)
-	with open('settings.json', 'w') as fp:
-		json.dump(Settings, fp, sort_keys=True, indent=4)
-	print(Settings)
-	print(select)
+	save_settings()
 	return redirect(url_for("info"))
 
-@app.route("/browse", methods = ["GET"])
+@app.route("/randomsongfrom" , methods=['GET', 'POST'])
+def randomsongfrom():
+	select1 = request.form.get('randomsongfrom_select_que')
+	Settings["randomsongpath"] = str(select1)
+	save_settings()
+	return redirect(url_for("queue"))
+
+@app.route("/browse", methods = ["GET", 'POST'])
 def browse():
 	search = bool(request.args.get('q'))
 	page = request.args.get(get_page_parameter(), type = int, default = 1)
-
 	letter = request.args.get('letter')
 
-	available_songs = K.available_songs
-	if letter:
-		if (letter == "numeric"):
-			available_songs = [k for k,v in K.songname_trans.items() if not v[0].islower()]
-		else:
-			available_songs = [k for k,v in K.songname_trans.items() if v.startswith(letter)]
+	if Settings["song_list"] == "Default":
+		song_book = K.songbook_table
 
+	if Settings["song_list"] == "Favorite":
+		data = K.favorite_table
+		latest_rows = defaultdict(lambda: None)
+		# Create a counter dictionary to count occurrences of values in the second column
+		counter = defaultdict(int)
+		# Iterate over the data and keep only the latest row for each value in the second column
+		for row in data:
+			key = row[8]
+			counter[key] += 1
+			if latest_rows[key] is None or row[9] > latest_rows[key][9]:
+				latest_rows[key] = row
+		# Retrieve the updated data with the latest rows
+		data_with_latest = list(latest_rows.values())
+
+		data_with_counter = [(row[0],row[1],row[2],row[3],row[4],row[5],row[6],row[7], row[8],\
+		 row[9], row[10], counter[row[8]]) for row in data_with_latest]
+		song_book = sorted(data_with_counter, key=lambda x: x[11], reverse=True)
+
+	if Settings["song_list"] == "History":
+		song_book = K.history_table
+		# song_book.reverse()
+
+	select = request.form.get('filtersong')
+	if select != None:
+		available_songs = []
+		for ls in song_book:
+			if select.casefold() in ls[6].casefold():
+				available_songs.append(ls)
+	else:
+		available_songs = song_book
+
+	if letter:
+		available_songs = []
+
+		if letter == "numeric":
+			for file_name in song_book:
+				if not file_name[1].islower():
+					available_songs.append(file_name)
+		else:
+			for file_name in song_book:
+				if file_name[1].startswith(letter):
+					available_songs.append(file_name)
 	getString2 = lambda ii: getString1(request.client_lang, ii)
 
 	if "sort" in request.args and request.args["sort"] == "date":
-		songs = sorted(available_songs, key = lambda x: os.path.getctime(x))
+		# songs = sorted(available_songs, key = lambda x: os.path.getctime(x))
+		songs = song_book
 		songs.reverse()
 		sort_order = "Date"
 		sort_order_text = getString2(99)
@@ -434,6 +581,7 @@ def browse():
 	pagination = Pagination(css_framework = 'bulma', page = page, total = len(songs), search = search, search_msg = getString2(103),
 	                        record_name = getString2(101), display_msg = getString2(102), per_page = results_per_page)
 	start_index = (page - 1) * (results_per_page - 1)
+
 	return render_template(
 		"files.html",
 		getString1 = getString2,
@@ -444,8 +592,16 @@ def browse():
 		letter = letter,
 		title = getString2(98),
 		songs = songs[start_index:start_index + results_per_page],
-		admin = is_admin()
+		admin = is_admin(),
+		song_list_data = Settings["song_list"]
+		# song_list_data = [{'name': Settings["song_list"]}, {'name': 'Favorite'}, {'name': 'History'}]
 	)
+@app.route("/song_book" , methods=['GET', 'POST'])
+def song_book():
+	browse_list = request.form.get('browse_list')
+	Settings["song_list"] = browse_list
+	save_settings()
+	return redirect(url_for("browse"))
 
 def transform_boolean(dct, S):
 	return {k: ((v=='on') if k in S else v) for k, v in dct.items()}
@@ -488,12 +644,11 @@ def delete_file():
 		flash(getString(21), "is-danger")
 	return redirect(url_for("browse"))
 
-
 @app.route("/files/edit", methods = ["GET", "POST"])
 def edit_file():
 	queue_error_msg = getString(22)
-	if "song" in request.args:
-		song_path = request.args["song"]
+	if "song[6]" in request.args:
+		song_path = request.args["song[6]"]
 		if song_path == K.now_playing_filename:
 			flash(queue_error_msg + song_path, "is-danger")
 			return redirect(url_for("browse"))
@@ -530,16 +685,13 @@ def splash():
 @app.route("/info")
 def info():
 	url = K.url
-
 	# cpu
 	cpu = str(psutil.cpu_percent()) + "%"
-
 	# mem
 	memory = psutil.virtual_memory()
 	available = round(memory.available / 1024.0 / 1024.0, 1)
 	total = round(memory.total / 1024.0 / 1024.0, 1)
 	memory = str(available) + "MB free / " + str(total) + "MB total ( " + str(memory.percent) + "% )"
-
 	# disk
 	disk = psutil.disk_usage("/")
 	# Divide from Bytes -> KB -> MB -> GB
@@ -560,9 +712,6 @@ def info():
 	youtubedl_version = K.youtubedl_version
 
 	is_pi = get_platform() == "raspberry_pi"
-
-
-
 	return render_template(
 		"info.html",
 		getString1 = getString2,
@@ -581,15 +730,15 @@ def info():
 		pikaraoke_version = VERSION,
 		download_path = Settings["Song_dir"],
 		# download_path = K.args.download_path,
-		num_of_songs = len(K.available_songs),
+		num_of_songs = len(K.songbook_table),
 		screencapture = get_status(screencapture),
 		vocalsplitter = get_status(vocalsplitter) + vocal_extra,
 		platform = K.platform,
 		admin = is_admin(),
 		admin_enabled = admin_password != None,
 		data=[{'name': Settings["quality"]}, {'name':'360p'}, {'name':'480p'}, {'name':'720p'}, {'name':'1080p'}]
+		# rdata = [{'name': Settings["randomsongpath"]}, {'name': 'Default'}, {'name': 'History'},{'name': 'Favorite'}]
 	)
-
 
 # Delay system commands to allow redirect to render first
 def delayed_halt(cmd):
@@ -615,7 +764,6 @@ def delayed_halt(cmd):
 
 def update_youtube_dl():
 	K.upgrade_youtubedl()
-
 
 @app.route("/update_ytdl")
 def update_ytdl():
@@ -649,7 +797,6 @@ def quit():
 		flash(getString(36), "is-danger")
 	return redirect(url_for("home"))
 
-
 @app.route("/shutdown")
 def shutdown():
 	if (is_admin()):
@@ -660,7 +807,6 @@ def shutdown():
 		flash(getString(38), "is-danger")
 	return redirect(url_for("home"))
 
-
 @app.route("/reboot")
 def reboot():
 	if (is_admin()):
@@ -670,7 +816,6 @@ def reboot():
 	else:
 		flash(getString(40), "is-danger")
 	return redirect(url_for("home"))
-
 
 @app.route("/expand_fs")
 def expand_fs():
@@ -687,7 +832,6 @@ def expand_fs():
 # Handle sigterm, apparently cherrypy won't shut down without explicit handling
 signal.signal(signal.SIGTERM, lambda signum, stack_frame: K.stop())
 
-
 def get_default_youtube_dl_path(platform):
 	# use Python's cross-platform way
 	shutil_path = shutil.which('yt-dlp')
@@ -701,7 +845,7 @@ def get_default_youtube_dl_path(platform):
 			return choco_ytdl_path
 		if os.path.isfile(scoop_ytdl_path):
 			return scoop_ytdl_path
-		return r"C:\Program Files\yt-dlp\yt-dlp.exe"
+		return Settings["ytpath"]
 	default_ytdl_unix_path = "/usr/local/bin/yt-dlp"
 	if platform == "osx":
 		if os.path.isfile(default_ytdl_unix_path):
@@ -712,17 +856,16 @@ def get_default_youtube_dl_path(platform):
 	else:
 		return default_ytdl_unix_path
 
-
 def get_default_dl_dir(platform):
 	if platform == "raspberry_pi":
 		return "/usr/lib/pikaraoke/songs"
 	else:
 		legacy_directory = os.path.expanduser(Settings["Song_dir"])
 		if os.path.exists(legacy_directory):
-			print("legacy_directory1: "+ legacy_directory)
+			print("LEGACY DIRECTORY: "+ legacy_directory)
 			return legacy_directory
 		else:
-			print("legacy_directory2: "+ legacy_directory)
+			print("LEGACY DIRECTORY: "+ legacy_directory)
 			return os.path.expanduser(Settings["Song_dir"])
 
 @app.route("/refresh")
@@ -732,7 +875,6 @@ def refresh():
 	else:
 		flash(getString(34), "is-danger")
 	return redirect(url_for("browse"))
-
 @app.route("/set_songpath")
 def set_songpath():
 	if (is_admin()):
@@ -747,17 +889,15 @@ def set_songpath():
 				# K.set_download_path()
 				get_default_dl_dir(platform)
 				print("Settings song path change: "+Settings["Song_dir"])
-				try:
-					with open('settings.json', 'w') as fp:
-						json.dump(Settings, fp, sort_keys=True, indent=4)
-				except:
-					pass
+				save_settings()
 		else:
 			pass
-		return redirect(url_for("info"))	
+		return redirect(url_for("info"))
 				
 
 if __name__ == "__main__":
+
+	from tkinter import filedialog, messagebox
 
 	platform = get_platform()
 	default_port = Settings["browser_port"]
@@ -772,8 +912,21 @@ if __name__ == "__main__":
 	default_vlc_path = get_default_vlc_path(platform)
 	default_vlc_port = Settings["vlc_port"]
 
-	print("default_dl_dir: "+ default_dl_dir)
-
+	if Settings["Song_dir"] == "" or os.path.exists(Settings["Song_dir"]) == False:
+		root = Tk() 
+		root.wm_attributes('-topmost', 1)
+		root.withdraw()
+		messagebox.showwarning("Directory Not Found", "Please select your prepared directory for your karaoke files.")
+		filepath=askdirectory(parent = root, initialdir='shell:MyComputerFolder', title="Select song directory")
+		if filepath != "":
+			if not filepath.endswith("/"):
+				filepath += "/"
+				Settings["Song_dir"] = filepath
+				get_default_dl_dir(platform)
+				print("Settings song path change: "+Settings["Song_dir"])
+				save_settings()
+		else:
+			pass
 	# parse CLI args
 	parser = argparse.ArgumentParser()
 
@@ -928,13 +1081,13 @@ if __name__ == "__main__":
 
 	# check if required binaries exist
 	if not os.path.isfile(args.youtubedl_path):
-		print(getString(44) + args.youtubedl_path)
+		# print(getString(44) + args.youtubedl_path)
 		sys.exit(1)
 	if args.use_vlc and not os.path.isfile(args.vlc_path):
-		print(getString(45) + args.vlc_path)
+		# print(getString(45) + args.vlc_path)
 		sys.exit(1)
 	if platform == "raspberry_pi" and not args.use_vlc and not os.path.isfile(args.omxplayer_path):
-		print(getString(46) + args.omxplayer_path)
+		# print(getString(46) + args.omxplayer_path)
 		sys.exit(1)
 
 	# setup/create download directory if necessary
@@ -972,7 +1125,5 @@ if __name__ == "__main__":
 		cherrypy.engine.start()
 		K.run()
 		cherrypy.engine.exit()
-
-	
 
 	sys.exit()
