@@ -3,9 +3,35 @@
 <!--<script src="/static/jquery-ui.min.js"></script>-->
 <script src="/static/jquery.ui.touch-punch.min.js"></script>
 <style>
-  .drag-starter {
-    background-color: rgb(87, 78, 11);
-  }
+.drag-starter {
+  background-color: rgb(87, 78, 11);
+}
+
+details {
+  user-select: none;
+}
+
+details>summary i.icon {
+  width: 24px;
+  height: 24px;
+  transition: all 0.3s;
+  margin-left: 5px;
+}
+
+details[open] summary i.icon {
+  transform: rotate(180deg);
+}
+
+summary {
+  display: flex;
+  cursor: pointer;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+
 </style>
 <script>
   var queue = [];
@@ -112,7 +138,7 @@
   $(document).on('click', '.confirm-clear', function (e) {
     e.preventDefault();
     let prompt = window.prompt(
-      "{{getString1(108)}}"
+      "{{ getString1(108) }}"
     );
     if (prompt.toLowerCase() === "ok") {
       location.href = this.href;
@@ -137,14 +163,38 @@
 <table class="table is-striped" id="auto-refresh" style="margin-bottom: 1em">
 </table>
 
-{% if admin %}
+
 <a class="add-random has-text-success" href="/queue/addrandom?amount=3">
   <i class="icon icon-plus-circled"></i>{{getString1(109)}}
 </a>
+{% if admin %}
 <a class="confirm-clear has-text-danger is-pulled-right" href="/queue/edit?action=clear">
   <i class="icon icon-trash-empty"></i>{{getString1(110)}}
-</a><br />
-
+</a>
 {% endif %}
+
+<p></p>
+<details>
+  <summary>
+    Randomizer Settings <i class="icon icon-info-circled"> </i>
+  </summary>
+  <p class="help">{{getString1(208)}}<br />{{getString1(209)}}<br />{{getString1(210)}}<br />{{getString1(211)}}</p>
+</details>
+
+
+<div style="margin-bottom: 10px;">
+  <form action="{{ url_for('randomsongfrom') }}" method="POST">
+    <div style="text-align: left;">
+      <input type="radio" name="randomsongfrom_select_que" value="Default" id="default" {% if rdata == 'Default' %}checked{% endif %} onchange="this.form.submit()">
+      <label for="default">Default:({{ defaultsong }})</label>
+      <input type="radio" name="randomsongfrom_select_que" value="Favorite" id="favorite" {% if rdata == 'Favorite' %}checked{% endif %} onchange="this.form.submit()">
+      <label for="favorite">Favorite:({{ favoritesong }})</label>
+      <input type="radio" name="randomsongfrom_select_que" value="History" id="history" {% if rdata == 'History' %}checked{% endif %} onchange="this.form.submit()">
+      <label for="history">History:({{ historysong }})</label>
+    </div>
+  </form>
+</div>
+
+
 
 {% endblock %}
