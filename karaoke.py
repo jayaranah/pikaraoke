@@ -18,7 +18,9 @@ from unidecode import unidecode
 from lib import omxclient, vlcclient
 from lib.get_platform import *
 from pikaraoke import getString
-
+import sqlite3
+import re
+from datetime import datetime, timedelta
 STD_VOL = 65536/8/np.sqrt(2)
 
 if get_platform() != "windows":
@@ -27,18 +29,12 @@ if get_platform() != "windows":
 settings = codecs.open("res/settings.json","r","utf-8")
 Settings = json.load(settings)
 
-listofsong = codecs.open("res/songslist.json","r","utf-8")
-Songdict = json.load(listofsong)
-
-queuehistory = codecs.open("res/queuehistory.json","r","utf-8")
-Qhistory = json.load(queuehistory)
-
-favsong = codecs.open("res/favorite.json","r","utf-8")
-Favoritesong = json.load(favsong)
-
 image_bg = pygame.image.load('res/bg/background.jpg')
 
-
+def get_db_connection():
+    conn = sqlite3.connect('database.db')
+    conn.row_factory = sqlite3.Row
+    return conn
 
 mp.freeze_support()
 
@@ -50,13 +46,10 @@ class Karaoke:
 
 	queue = []
 	queue_hash = None
-	available_songs = []
-	favorite_songs = []
-	history_songs = []
+	# available_songs = []
+	# favorite_songs = []
+	# history_songs = []
 	rename_history = {}
-	songname_trans = Songdict # transliteration is used for sorting and initial letter search
-	favoritesong_trans = Favoritesong
-	historysong_trans = Qhistory
 	now_playing = None
 	now_playing_filename = None
 	now_playing_user = None
@@ -188,12 +181,31 @@ class Karaoke:
 
 		self.url = "http://%s:%s" % (self.ip, self.port)
 
-		# get songs from download_path
-		# self.get_available_songs() Remove scanning songs in open karaoke
+		conn = get_db_connection()
+		c = conn.cursor()
 
-		self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
-		self.favorite_songs = sorted(self.favoritesong_trans, key = self.favoritesong_trans.get)
-		self.history_songs = sorted(self.historysong_trans, key = self.historysong_trans.get)
+		#Default Song Book
+		c.execute("SELECT * FROM songbook_table ORDER BY file_name")
+		self.songbook_table = c.fetchall()
+
+		#Favorite Song Book
+		c.execute('''
+			SELECT songbook_table.*, favorite_table.*
+			FROM favorite_table
+			INNER JOIN songbook_table ON favorite_table.song_id = songbook_table.id
+		''')
+		self.favorite_table = c.fetchall()
+
+		#History Song Book
+		c.execute('''
+			SELECT songbook_table.*, history_table.*
+			FROM history_table
+			INNER JOIN songbook_table ON history_table.song_id = songbook_table.id
+			ORDER BY history_table.date_time DESC
+		''')
+		self.history_table = c.fetchall()
+
+		conn.close()
 
 		self.get_youtubedl_version()
 
@@ -251,17 +263,6 @@ class Karaoke:
 				ssl_enabled = line.split("d=")[1].strip()
 
 		return (server_port, ssid_prefix, ssl_enabled)
-
-
-	def save_settings(self):
-		logging.info("Saving settings")
-		f = codecs.open('res/settings.json','w','utf-8')
-		json.dump(Settings, f, sort_keys=True, indent=4, ensure_ascii=False)
-
-	def save_favorite(self):
-		f = codecs.open('res/favorite.json','w','utf-8')
-		json.dump(Favoritesong, f, sort_keys=True, indent=4, ensure_ascii=False)
-
 
 	def get_youtubedl_version(self):
 		self.youtubedl_version = (check_output([self.youtubedl_path, "--version"]).strip().decode("utf8"))
@@ -336,7 +337,6 @@ class Karaoke:
 				except Alarm:
 					raise KeyboardInterrupt
 			logging.debug("Done initializing splash screen")
-
 
 
 	def toggle_full_screen(self, fullscreen=None):
@@ -450,7 +450,7 @@ class Karaoke:
 		elif not self.firstSongStarted:
 			text1 = self.render_font(sysfont_size, getString(196) + ': ' + self.download_path, (255, 255, 0))
 			self.screen.blit(text1[0], self.normalize((20, 20)))
-			text2 = self.render_font(sysfont_size, getString(197) + ': %d'%len(self.available_songs), (255, 255, 0))
+			text2 = self.render_font(sysfont_size, getString(197) + ': %d'%len(self.songbook_table), (255, 255, 0))
 			self.screen.blit(text2[0], self.normalize((20, 30+sysfont_size)))
 			
 
@@ -533,12 +533,10 @@ class Karaoke:
 			except:
 				logging.error("Error parsing video id from url: " + url)
 				return None
-
 		try:
 			return [i for i in os.listdir(self.download_path+'tmp/') if youtube_id in i][0]
 		except:
 			pass
-
 		filename = f"{info_json['title']}---{info_json['id']}.{info_json['ext']}"
 		return filename if os.path.isfile(self.download_path+'tmp/'+filename) else None
 
@@ -559,34 +557,65 @@ class Karaoke:
 		elif Settings["quality"] == "1080p":
 			opt_quality = ['-f', '137+140']
 
-		# opt_quality = ['-f', 'bestvideo[ext!=webm][height<=480]+bestaudio[ext!=webm]/best[ext!=webm]'] if self.high_quality else ['-f', 'mp4']
 		opt_sub = ['--sub-langs', 'all', '--embed-subs'] if include_subtitles else []
 		cmd = [self.youtubedl_path] + opt_quality + ["-o", self.download_path+'tmp/'+dl_path] + opt_sub + [song_url]
 		logging.debug("Youtube-dl command: " + " ".join(cmd))
 		rc = subprocess.call(cmd)
+
 		if rc != 0:
 			logging.error("Error code while downloading, retrying without format options ...")
 			cmd = [self.youtubedl_path, "-o", self.download_path + 'tmp/' + dl_path] + opt_sub + [song_url]
 			logging.debug("Youtube-dl command: " + " ".join(cmd))
 			rc = subprocess.call(cmd)  # retry once. Seems like this can be flaky
+
 		if rc == 0:
 			logging.debug("Song successfully downloaded: " + song_url)
 			self.downloading_songs[song_url] = 0
 			bn = self.get_downloaded_file_basename(song_url)
 			bnn = bn.split("---")
 			bnnn = bnn[0]+".mp4"
-
 			if bn:
 				shutil.move(self.download_path+'tmp/'+bn, self.download_path+bnnn)
-				# self.get_available_songs() Remove scanning files
 				if enqueue:
 					if self.platform == "windows":
-						dpath = str(PureWindowsPath(self.download_path+bnnn))
-						self.songname_trans[dpath] = bnnn.lower()
-						with open('res/songslist.json', 'w') as fp:
-							json.dump(self.songname_trans, fp, sort_keys=True, indent=4)
-						self.enqueue(dpath, song_added_by)
-						self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
+						p = str(PureWindowsPath(self.download_path+bnnn))
+
+						song_path = p.replace("\\", "\\")
+						file_name = os.path.splitext(bnnn)[0].lower()
+						pattern = r'(.*) - (.*) \[(.*)\]'
+						pattern2 = r'(.*) - (.*)'
+						match = re.match(pattern, file_name)
+						match2 = re.match(pattern2, file_name)
+						if match:
+							artist = match.group(1)
+							title = match.group(2)
+							company = match.group(3)
+						elif match2:
+							artist = match2.group(1)
+							title = match2.group(2)
+							company = "Youtube"
+						else:
+							artist = ""
+							title = ""
+							company = "Youtube"
+
+						# Get the file modified date/time
+						date_time = datetime.now()
+
+						conn = get_db_connection()
+						c = conn.cursor()
+
+						c.execute('''INSERT INTO songbook_table (file_name, artist, title, company, date_time, song_path)
+									VALUES (?, ?, ?, ?, ?, ?)''',
+								(file_name, artist, title, company, date_time, song_path))
+						conn.commit()
+
+						c.execute("SELECT * FROM songbook_table ORDER BY file_name")
+						self.songbook_table = c.fetchall()
+
+						conn.close()
+
+						self.enqueue(song_path, song_added_by)
 					else:
 						self.enqueue(self.download_path+bnnn, song_added_by)
 					self.downloading_songs[song_url] = '00'
@@ -604,20 +633,82 @@ class Karaoke:
 		logging.info("Fetching available songs in: " + Settings["Song_dir"])
 		# files_grabbed = []
 		
-		self.songname_trans = {}
+		# self.songname_trans = {}
+		conn = get_db_connection()
+		c = conn.cursor()
+
+		# self.songname_trans = {}
 		if self.platform == "windows":
 			P=Path(Settings["Song_dir"])
 			for file in P.rglob('*.*'):
 				base, ext = os.path.splitext(file.as_posix())
-				if ext.lower() in media_types:
-					if os.path.isfile(file.as_posix()):
-						if os.path.splitext(file)[1].lower() in media_types:
-							# files_grabbed.append(file)
-							trans = unidecode(self.filename_from_path(file)).lower()
-							while trans and not trans[0].islower() and not trans[0].isdigit():
-								trans = trans[1:]
-							p = str(PureWindowsPath(file))
-							self.songname_trans[p] = trans
+				if ext.lower() in media_types and os.path.isfile(file.as_posix()):
+					trans = unidecode(file.name).lower()
+					while trans and not trans[0].islower() and not trans[0].isdigit():
+						trans = trans[1:]
+					p = str(PureWindowsPath(file))
+					song_path = p.replace("\\", "\\")  # Replace backslashes with forward slashes for compatibility
+
+					# Extract artist, title, company, and date/time from file name
+					file_name = os.path.splitext(file.name)[0].lower()
+					pattern = r'(.*) - (.*) \[(.*)\]'
+					pattern2 = r'(.*) - (.*)'
+					match = re.match(pattern, file_name)
+					match2 = re.match(pattern2, file_name)
+
+
+					if match:
+						artist = match.group(1)
+						title = match.group(2)
+						company = match.group(3)
+					elif match2:
+						artist = match2.group(1)
+						title = match2.group(2)
+						company = ""
+					else:
+						artist = ""
+						title = ""
+						company = ""
+
+					# Get the file modified date/time
+					date_time = os.path.getmtime(file)
+				
+					# Check if the song_path already exists in the database
+					c.execute("CREATE INDEX IF NOT EXISTS idx_song_path ON songbook_table(song_path)")
+
+					# Check if the song_path already exists in the database
+					c.execute('SELECT id FROM songbook_table WHERE song_path = ?', (song_path,))
+					existing_row = c.fetchone()
+
+					if not existing_row:
+						c.execute('''INSERT INTO songbook_table (file_name, artist, title, company, date_time, song_path)
+									VALUES (?, ?, ?, ?, ?, ?)''',
+								(file_name, artist, title, company, date_time, song_path))
+
+			conn.commit()
+
+			#Default Song Book
+			c.execute("SELECT * FROM songbook_table ORDER BY file_name")
+			self.songbook_table = c.fetchall()
+
+			#Favorite Song Book
+			c.execute('''
+				SELECT songbook_table.*, favorite_table.*
+				FROM favorite_table
+				INNER JOIN songbook_table ON favorite_table.song_id = songbook_table.id
+			''')
+			self.favorite_table = c.fetchall()
+
+			#History Song Book
+			c.execute('''
+				SELECT songbook_table.*, history_table.*
+				FROM history_table
+				INNER JOIN songbook_table ON history_table.song_id = songbook_table.id
+				ORDER BY history_table.date_time DESC
+			''')
+			self.history_table = c.fetchall()
+
+
 		else:
 			for bn in os.listdir(self.download_path):
 				fn = self.download_path + bn
@@ -629,11 +720,9 @@ class Karaoke:
 						while trans and not trans[0].islower() and not trans[0].isdigit():
 							trans = trans[1:]
 						self.songname_trans[fn] = trans
+		conn.close()
 
-		# self.available_songs = sorted(files_grabbed, key = lambda f: str.lower(os.path.basename(f)))
-		with open('res/songslist.json', 'w') as fp:
-			json.dump(self.songname_trans, fp, sort_keys=True, indent=4)
-		self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
+		# self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
 
 	def get_all_assoc_files(self, song_path):
 		basename = os.path.basename(song_path)
@@ -649,7 +738,8 @@ class Karaoke:
 		if os.path.isfile(filename):
 			try:
 				os.remove(filename)
-			except:
+			except Exception as e:
+				logging.error(e)
 				pass
 
 	def delete(self, song_path):
@@ -659,7 +749,51 @@ class Karaoke:
 		for fn in self.get_all_assoc_files(song_path):
 			self.delete_if_exist(fn)
 
-		self.get_available_songs()
+		# self.get_available_songs()
+
+		conn = get_db_connection()
+		c = conn.cursor()
+
+		c.execute("SELECT id FROM songbook_table WHERE song_path = ?", (song_path,))
+		row = c.fetchone()
+		if row is not None:
+			song_id = row[0]
+
+			# Check if song_id exists in history_table
+			c.execute("SELECT song_id FROM history_table WHERE song_id = ?", (song_id,))
+			if c.fetchone() is not None:
+				c.execute("DELETE FROM history_table WHERE song_id = ?", (song_id,))
+
+			# Check if song_id exists in favorite_table
+			c.execute("SELECT song_id FROM favorite_table WHERE song_id = ?", (song_id,))
+			if c.fetchone() is not None:
+				c.execute("DELETE FROM favorite_table WHERE song_id = ?", (song_id,))
+
+			# Delete the row from songbook_table
+			c.execute("DELETE FROM songbook_table WHERE id = ?", (song_id,))
+
+			c.execute("SELECT * FROM songbook_table ORDER BY file_name")
+			self.songbook_table = c.fetchall()
+
+			# Favorite Song Book
+			c.execute('''
+				SELECT songbook_table.*, favorite_table.*
+				FROM favorite_table
+				INNER JOIN songbook_table ON favorite_table.song_id = songbook_table.id
+			''')
+			self.favorite_table = c.fetchall()
+
+			# History Song Book
+			c.execute('''
+				SELECT songbook_table.*, history_table.*
+				FROM history_table
+				INNER JOIN songbook_table ON history_table.song_id = songbook_table.id
+				ORDER BY history_table.date_time DESC
+			''')
+			self.history_table = c.fetchall()
+
+		conn.commit()
+		conn.close()
 
 	def rename_if_exist(self, old_path, new_path):
 		if os.path.isfile(old_path):
@@ -696,13 +830,20 @@ class Karaoke:
 		sdirname = os.path.dirname(song_path)
 		ospath = str(PureWindowsPath(sdirname+"/"+new_basename))
 
-		del self.songname_trans[song_path]
-		self.songname_trans[ospath] = new_basestem.lower()
-		with open('res/songslist.json', 'w') as fp:
-			json.dump(self.songname_trans, fp, sort_keys=True, indent=4)
-		self.available_songs = sorted(self.songname_trans, key = self.songname_trans.get)
+		conn = get_db_connection()
+		c = conn.cursor()
+		# Update the song_path in songbook_table
+		c.execute("UPDATE songbook_table SET song_path = ? WHERE song_path = ?", (ospath, song_path))
+
+		conn.commit()
+
+		# Commit the changes and close the connection
+		c.execute("SELECT * FROM songbook_table ORDER BY file_name")
+		songbook_table1 = c.fetchall()
+		self.songbook_table = songbook_table1
 
 
+		conn.close()
 
 	def filename_from_path(self, file_path):
 		rc = os.path.basename(file_path)
@@ -718,11 +859,89 @@ class Karaoke:
 		elif self.omxclient != None:
 				self.omxclient.kill()
 
+
+	def seconds_to_srt_time(self, seconds):
+		time = str(timedelta(seconds=seconds))
+		time_parts = time.split(':')
+		hours = time_parts[0]
+		minutes = time_parts[1]
+		seconds = time_parts[2] if len(time_parts) > 2 else '00'
+		milliseconds = time_parts[3][:3] if len(time_parts) > 3 else '000'
+		return f"{hours.zfill(2)}:{minutes.zfill(2)}:{seconds.zfill(2)},{milliseconds}"
+
+	def generate_srt_content(self, subtitles):
+		srt_content = ''
+		for index, subtitle in enumerate(subtitles, start=1):
+			srt_content += str(index) + '\n'
+			start_time = self.seconds_to_srt_time(subtitle['start_time'])
+			end_time = self.seconds_to_srt_time(subtitle['end_time'])
+			srt_content += f"{start_time} --> {end_time}\n"
+			srt_content += subtitle['text'] + '\n\n'
+		return srt_content
+
+	def create_srt_file(self, subtitles, file_path):
+		directory = os.path.dirname(file_path)
+		filename = os.path.basename(file_path)
+		srt_filename = os.path.splitext(filename)[0] + '.srt'
+		srt_filepath = os.path.join(directory, srt_filename)
+		srt_content = self.generate_srt_content(subtitles)
+
+		print("srt:", srt_filepath)
+
+		with codecs.open(srt_filepath, 'w', encoding='utf-8') as file:
+			file.write(srt_content)
+
+		conn = get_db_connection()
+		c = conn.cursor()
+
+		c.execute("INSERT INTO srt_table (srt_path) VALUES (?)", (srt_filepath,))
+
+		c.execute("SELECT * FROM srt_table")
+		rows = c.fetchall()
+
+		for row in rows:
+			filepath = row[1]
+			if filepath != srt_filepath:
+				# Delete the file
+				if os.path.exists(filepath):
+					os.remove(filepath)
+				# Delete the corresponding row from the database
+				c.execute("DELETE FROM srt_table WHERE srt_path=?", (filepath,))
+
+		conn.commit()
+		conn.close()
+
 	def play_file(self, file_path, extra_params = []):
 		self.switchingSong = True
 		if self.use_vlc:
 			extra_params1 = []
 			logging.info("Playing video in VLC: " + file_path)
+
+			if len(self.queue) >= 1:
+				logging.debug("Rendering next song to splash screen")
+				next_song = self.queue[0]["title"]
+				separator = " | "
+				next_user = self.queue[0]["user"]
+				
+			else:
+				logging.debug("Rendering next song to splash screen")
+				next_song = "Please Select Song"
+				separator = ""
+				next_user = ""
+
+
+			if os.path.splitext(file_path)[1].lower() == ".mp4":
+				subtitles = [
+					{'start_time': 30, 'end_time': 40, 'text': 'Up Next: '+ next_song + separator + next_user},
+					{'start_time': 120, 'end_time': 130, 'text': 'Up Next: '+ next_song + separator + next_user },
+				]
+				logging.info("Creating SRT to flashing the next song.")
+				self.create_srt_file(subtitles, file_path)
+			else:
+				logging.info("SRT not created for flashing the next song.")
+
+
+
 			if self.platform != 'osx':
 				extra_params1 += ['--drawable-hwnd' if self.platform == 'windows' else '--drawable-xid',
 				                  hex(pygame.display.get_wm_info()['window'])]
@@ -787,10 +1006,34 @@ class Karaoke:
 			self.queue.append({"user": user, "file": song_path, "title": self.filename_from_path(song_path)})
 			self.update_queue_hash()
 
-			Qhistory[song_path] = self.filename_from_path(song_path).lower()
-			self.history_songs = sorted(self.historysong_trans, key = self.historysong_trans.get)
-			with open('res/queuehistory.json', 'w') as fp:
-				json.dump(Qhistory, fp, sort_keys=True, indent=4)
+			conn = get_db_connection()
+			c = conn.cursor()
+
+			c.execute('SELECT id FROM songbook_table WHERE song_path = ?', (song_path,))
+			song_id = c.fetchone()
+
+			date_time = datetime.now()
+			# date_time = date_time.strftime("[%m-%d-%y(%I:%M%p)]")
+			c.execute('''INSERT INTO history_table (song_id, date_time, selectedby)
+						VALUES (?, ?, ?)''',
+					(song_id[0], date_time, user))
+			
+			c.execute('''
+				SELECT songbook_table.*, history_table.*
+				FROM history_table
+				INNER JOIN songbook_table ON history_table.song_id = songbook_table.id
+				ORDER BY history_table.date_time DESC
+			''')
+			self.history_table = c.fetchall()
+
+			
+			conn.commit()
+			conn.close()
+
+			# Qhistory[song_path] = self.filename_from_path(song_path).lower()
+			# self.history_songs = sorted(self.historysong_trans, key = self.historysong_trans.get)
+			# with open('res/queuehistory.json', 'w') as fp:
+			# 	json.dump(Qhistory, fp, sort_keys=True, indent=4)
 			return True
 
 	def queue_add_random(self, amount):
@@ -800,15 +1043,12 @@ class Karaoke:
 		Settings = json.load(settings)
 
 		if Settings["randomsongpath"] == "Default":
-			songs = list(self.songname_trans)  # make a copy
-			print("Adding Song from songname_trans")
-		elif Settings["randomsongpath"] == "History":
-			songs = list(Qhistory)
-			print("Adding Song from history")
-		elif Settings["randomsongpath"] == "Favorite":
-			songs = list(Favoritesong)
-			print("Adding Song from Favorite")
-			
+			songs = [row[6] for row in self.songbook_table]
+		if Settings["randomsongpath"] == "History":
+			songs = [row[6] for row in self.history_table]
+		if Settings["randomsongpath"] == "Favorite":
+			songs = [row[6] for row in self.favorite_table]
+
 		if len(songs) == 0:
 			logging.warn("No available songs!")
 			return False
@@ -822,16 +1062,51 @@ class Karaoke:
 					self.queue.append({"user": "Randomizer", "file": songs[r], "title": self.filename_from_path(songs[r])})
 					i += 1
 				else:
-					if songs[r] in Favoritesong:
-						del Favoritesong[songs[r]]
-						logging.warn("Deleting in Favoritesong not exist: "+ songs[r])
-						with open('res/favorite.json', 'w') as fp:
-							json.dump(Favoritesong, fp, sort_keys=True, indent=4)
-					if songs[r] in Qhistory:
-						del Qhistory[songs[r]]
-						logging.warn("Deleting in Qhistory not exist: "+ songs[r])
-						with open('res/queuehistory.json', 'w') as fp:
-							json.dump(Qhistory, fp, sort_keys=True, indent=4)
+					logging.info("Song File not found... " + songs[r] + " Deleting from database")
+					conn = get_db_connection()
+					c = conn.cursor()
+
+					c.execute("SELECT id FROM songbook_table WHERE song_path = ?", (songs[r],))
+					row = c.fetchone()
+					if row is not None:
+						song_id = row[0]
+
+						# Check if song_id exists in history_table
+						c.execute("SELECT song_id FROM history_table WHERE song_id = ?", (song_id,))
+						if c.fetchone() is not None:
+							c.execute("DELETE FROM history_table WHERE song_id = ?", (song_id,))
+
+						# Check if song_id exists in favorite_table
+						c.execute("SELECT song_id FROM favorite_table WHERE song_id = ?", (song_id,))
+						if c.fetchone() is not None:
+							c.execute("DELETE FROM favorite_table WHERE song_id = ?", (song_id,))
+
+						# Delete the row from songbook_table
+						c.execute("DELETE FROM songbook_table WHERE id = ?", (song_id,))
+
+						c.execute("SELECT * FROM songbook_table ORDER BY file_name")
+						self.songbook_table = c.fetchall()
+
+						# Favorite Song Book
+						c.execute('''
+							SELECT songbook_table.*, favorite_table.*
+							FROM favorite_table
+							INNER JOIN songbook_table ON favorite_table.song_id = songbook_table.id
+						''')
+						self.favorite_table = c.fetchall()
+
+						# History Song Book
+						c.execute('''
+							SELECT songbook_table.*, history_table.*
+							FROM history_table
+							INNER JOIN songbook_table ON history_table.song_id = songbook_table.id
+							ORDER BY history_table.date_time DESC
+						''')
+						self.history_table = c.fetchall()
+
+					conn.commit()
+					conn.close()
+
 			songs.pop(r)
 			if len(songs) == 0:
 				self.update_queue_hash()
@@ -1223,11 +1498,22 @@ class Karaoke:
 		except:
 			self.normalize_vol = False
 			return 1
+				
+	def enable_vol_norm(self, enable):
+		self.normalize_vol = enable
+		if enable and shutil.which('ffmpeg') is None:
+			self.normalize_vol = enable = False
+		if enable and self.now_playing_filename:
+			self.volume = self.vlcclient.get_info_xml()['volume']
+			self.media_vol = self.compute_volume(self.now_playing_filename)
+			self.update_logical_vol()
+		return str(self.logical_volume)
+
 
 	def update_logical_vol(self):
 		if hasattr(self, 'media_vol'):
 			self.logical_volume = self.volume * self.media_vol
-
+	
 	def enable_vol_norm(self, enable):
 		self.normalize_vol = enable
 		if enable and shutil.which('ffmpeg') is None:
@@ -1241,7 +1527,6 @@ class Karaoke:
 	def run(self):
 		logging.info("Starting PiKaraoke!")
 		self.running = True
-
 		# Windows does not have tmux, vocal splitter can only be invoked from the main program
 		if self.platform == 'windows' or self.run_vocal:
 			self.vocal_restart()
@@ -1271,6 +1556,8 @@ class Karaoke:
 				elif (self.full_screen and not pygame.display.get_active()) and not self.is_file_playing():
 					self.pygame_reset_screen()
 				self.handle_run_loop()
+
+				
 			except KeyboardInterrupt:
 				logging.warn("Keyboard interrupt: Exiting pikaraoke...")
 				self.running = False
