@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import os, sys, time, shutil
 import argparse, requests, subprocess
 
