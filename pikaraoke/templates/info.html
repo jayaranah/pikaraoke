@@ -160,6 +160,15 @@
 <p class="has-text-warning" style="margin-top: 10px">{% trans %}*You may need to refresh the splash screen for these changes to take effect.{% endtrans %}</p>
 
 <div class="user-preference-container">
+  <input id="pref-download-path" class="user-preference-input" type="text" data-pref="download_path"
+    data-start-value="{{ download_path }}" value="{{ download_path }}" />
+  <label class="label">
+    {# MSG: Text for the input box to change the download path #}
+    {% trans %}Download path{% endtrans %}
+  </label>
+</div>
+
+<div class="user-preference-container">
   <input id="pref-bg-music" class="user-preference-checkbox" type="checkbox" data-pref="disable_bg_music" {% if disable_bg_music %}checked{% endif %}>
   <label class="label">{# MSG: Checkbox label which enable/disables background music on the Splash Screen #} {% trans %}Disable background music{% endtrans %}
   </label>
