@@ -16,6 +16,8 @@ def change_preferences():
         val = request.args["val"]
 
         rc = k.change_preferences(preference, val)
+        if preference == "download_path":
+            rc = k.change_download_path(val)
 
         return jsonify(rc)
     else:
