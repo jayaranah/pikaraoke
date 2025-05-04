@@ -83,4 +83,5 @@ def info():
         screensaver_timeout=k.screensaver_timeout,
         volume=int(100 * k.volume),
         buffer_size=k.buffer_size,
+        download_path=k.download_path,
     )
