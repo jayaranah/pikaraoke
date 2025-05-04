@@ -134,7 +134,7 @@ class Karaoke:
             self.get_user_preference("hide_notifications") or hide_notifications
         )
         self.hide_splash_screen = hide_splash_screen
-        self.download_path = download_path
+        self.download_path = self.get_user_preference("download_path") or download_path
         self.high_quality = self.get_user_preference("high_quality") or high_quality
         self.splash_delay = self.get_user_preference("splash_delay") or int(splash_delay)
         self.volume = self.get_user_preference("volume") or volume
@@ -174,6 +174,26 @@ class Karaoke:
 
         self.generate_qr_code()
 
+    def change_download_path(self, new_path):
+        """Changes the download directory and stores it in the config file."""
+
+        logging.info(f"Changing download path to: {new_path}")
+        try:
+            if "USERPREFERENCES" not in self.config_obj:
+                self.config_obj.add_section("USERPREFERENCES")
+
+            userprefs = self.config_obj["USERPREFERENCES"]
+            userprefs["download_path"] = str(new_path)
+            self.download_path = new_path  # Update the instance attribute
+            with open(self.config_file_path, "w") as conf:
+                self.config_obj.write(conf)
+            self.get_available_songs()  # Refresh the song list
+            return [True, _("Download path changed successfully")]
+        except Exception as e:
+            logging.error(f"Failed to change download path: {e}")
+            return [False, _("Failed to change download path")]
+
+    
     def get_url(self):
         if self.is_raspberry_pi:
             # retry in case pi is still starting up
