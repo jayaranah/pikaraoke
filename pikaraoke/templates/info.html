@@ -169,6 +169,14 @@
 </div>
 
 <div class="user-preference-container">
+  <input id="pref-hide-splash-screen" class="user-preference-checkbox" type="checkbox" data-pref="hide_splash_screen" {% if
+    hide_splash_screen %}checked{% endif %}>
+  <label class="label">{# MSG: Checkbox label which enable/disables headless mode #} {% trans
+    %}Headless mode{% endtrans %}
+  </label>
+</div>
+
+<div class="user-preference-container">
   <input id="pref-bg-music" class="user-preference-checkbox" type="checkbox" data-pref="disable_bg_music" {% if disable_bg_music %}checked{% endif %}>
   <label class="label">{# MSG: Checkbox label which enable/disables background music on the Splash Screen #} {% trans %}Disable background music{% endtrans %}
   </label>
