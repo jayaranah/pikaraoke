@@ -84,4 +84,5 @@ def info():
         volume=int(100 * k.volume),
         buffer_size=k.buffer_size,
         download_path=k.download_path,
+        hide_splash_screen=k.hide_splash_screen,
     )
