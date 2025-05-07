@@ -133,7 +133,7 @@ class Karaoke:
         self.hide_notifications = (
             self.get_user_preference("hide_notifications") or hide_notifications
         )
-        self.hide_splash_screen = hide_splash_screen
+        self.hide_splash_screen = self.get_user_preference("hide_splash_screen") or hide_splash_screen
         self.download_path = self.get_user_preference("download_path") or download_path
         self.high_quality = self.get_user_preference("high_quality") or high_quality
         self.splash_delay = self.get_user_preference("splash_delay") or int(splash_delay)
