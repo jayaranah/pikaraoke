@@ -203,6 +203,9 @@ def main():
         args.hide_splash_screen = True
         logging.info("Forced to run headless mode in Android")
 
+    if k.hide_splash_screen == True:
+        args.hide_splash_screen = True
+        logging.info("Headless mode by user")
     # Start the splash screen using selenium
     if not args.hide_splash_screen:
         driver = launch_splash_screen(k, args.window_size)
