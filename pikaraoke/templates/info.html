@@ -159,12 +159,12 @@
 {# MSG: Help text explaining the the need to restart after changing splash screen preferences #}
 <p class="has-text-warning" style="margin-top: 10px">{% trans %}*You may need to refresh the splash screen for these changes to take effect.{% endtrans %}</p>
 
-<div class="user-preference-container">
-  <input id="pref-download-path" class="user-preference-input" type="text" data-pref="download_path"
-    data-start-value="{{ download_path }}" value="{{ download_path }}" />
+<div>
+  <input style="width: 100%;" id="pref-download-path" class="user-preference-input" type="text" data-pref="download_path"
+    data-start-value="{{ download_path }}" value="{{ download_path }}" /><br>
   <label class="label">
     {# MSG: Text for the input box to change the download path #}
-    {% trans %}Download path{% endtrans %}
+    {% trans %}Download path. Make sure to add slash "/" at the end of path.{% endtrans %}
   </label>
 </div>
 
