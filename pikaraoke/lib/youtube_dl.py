@@ -1,9 +1,14 @@
 import logging
 import subprocess
+import sys
+import platform
 
 
 def get_youtubedl_version(youtubedl_path):
-    return subprocess.check_output([youtubedl_path, "--version"]).strip().decode("utf8")
+    try:
+        return subprocess.check_output([youtubedl_path, "--version"]).strip().decode("utf8")
+    except subprocess.CalledProcessError:
+        return "unknown"
 
 
 def get_youtube_id_from_url(url):
@@ -28,27 +33,67 @@ def upgrade_youtubedl(youtubedl_path):
             .strip()
         )
     except subprocess.CalledProcessError as e:
-        output = e.output.decode("utf8")
+        output = e.output.decode("utf8") if e.output else ""
+    
     logging.info(output)
+    
     if "You installed yt-dlp with pip or using the wheel from PyPi" in output:
-        # allow pip to break system packages (probably required if installed without venv)
-        args = ["install", "--upgrade", "yt-dlp", "--break-system-packages"]
-        try:
-            logging.info("Attempting youtube-dl upgrade via pip3...")
-            output = (
-                subprocess.check_output(["pip3"] + args, stderr=subprocess.STDOUT)
-                .decode("utf8")
-                .strip()
-            )
-        except FileNotFoundError:
-            logging.info("Attempting youtube-dl upgrade via pip...")
-            output = (
-                subprocess.check_output(["pip"] + args, stderr=subprocess.STDOUT)
-                .decode("utf8")
-                .strip()
-            )
+        # Check if we're in a virtual environment
+        in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
+        
+        # Base args - only add --break-system-packages if not in venv
+        args = ["install", "--upgrade", "yt-dlp"]
+        if not in_venv:
+            args.append("--break-system-packages")
+        
+        # Determine pip commands to try based on platform
+        if platform.system() == "Windows":
+            pip_commands = ["pip", "pip3"]
+        else:
+            pip_commands = ["pip3", "pip"]
+        
+        success = False
+        for pip_cmd in pip_commands:
+            try:
+                logging.info(f"Attempting youtube-dl upgrade via {pip_cmd}...")
+                output = (
+                    subprocess.check_output([pip_cmd] + args, stderr=subprocess.STDOUT)
+                    .decode("utf8")
+                    .strip()
+                )
+                logging.info(output)
+                success = True
+                break
+            except FileNotFoundError:
+                logging.warning(f"{pip_cmd} not found, trying next option...")
+                continue
+            except subprocess.CalledProcessError as e:
+                error_output = e.output.decode("utf8") if e.output else str(e)
+                logging.warning(f"{pip_cmd} upgrade failed: {error_output}")
+                
+                # If --break-system-packages failed, try without it
+                if "--break-system-packages" in args:
+                    try:
+                        logging.info(f"Retrying {pip_cmd} without --break-system-packages...")
+                        args_no_break = ["install", "--upgrade", "yt-dlp"]
+                        output = (
+                            subprocess.check_output([pip_cmd] + args_no_break, stderr=subprocess.STDOUT)
+                            .decode("utf8")
+                            .strip()
+                        )
+                        logging.info(output)
+                        success = True
+                        break
+                    except subprocess.CalledProcessError as e2:
+                        error_output2 = e2.output.decode("utf8") if e2.output else str(e2)
+                        logging.warning(f"{pip_cmd} upgrade failed even without --break-system-packages: {error_output2}")
+                        continue
+        
+        if not success:
+            logging.error("All pip upgrade attempts failed. Continuing with current version.")
+    
+    # Always try to get the version, even if upgrade failed
     youtubedl_version = get_youtubedl_version(youtubedl_path)
-
     return youtubedl_version
 
 
